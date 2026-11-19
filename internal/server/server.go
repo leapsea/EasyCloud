@@ -19,6 +19,8 @@ import (
 	"github.com/easycloud/easycloud/internal/filetoken"
 	"github.com/easycloud/easycloud/internal/identity"
 	"github.com/easycloud/easycloud/internal/index"
+	"github.com/easycloud/easycloud/internal/media/info"
+	"github.com/easycloud/easycloud/internal/media/playback"
 	"github.com/easycloud/easycloud/internal/monitor"
 	"github.com/easycloud/easycloud/internal/office"
 	"github.com/easycloud/easycloud/internal/pathguard"
@@ -160,6 +162,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 	}
 	s.Plugins = plugins
 	thumbs := thumb.New(guard, dataRoot, filepath.Join(cfg.Paths.AppData, "thumbs"), plugins, log)
+	player := playback.New(files, filepath.Join(cfg.Paths.AppData, "playback"), rec, log)
 	files.SetEnricher(enricher{store: idxStore, thumbs: thumbs})
 	signer, err := filetoken.Load(ctx, db)
 	if err != nil {
@@ -252,6 +255,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 			p.Use(idHTTP.Require)
 			idHTTP.Mount(p)
 			storagehttp.Mount(p, files, rec, log)
+			playback.Mount(p, player, log)
+			info.Mount(p, info.New(files, log), log)
 			index.Mount(p, idxStore, guard, log)
 			thumb.Mount(p, thumbs, log)
 			mountTokens(p, signer, files, log)
@@ -291,6 +296,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 		every(time.Hour, func(ctx context.Context) {
 			ids.PurgeExpiredSessions(ctx)
 			thumbs.Prune(180 * 24 * time.Hour)
+			player.Prune(90 * 24 * time.Hour)
 			shares.PruneExpired(ctx)
 			rec.Prune(ctx, 365*24*time.Hour)
 		}),

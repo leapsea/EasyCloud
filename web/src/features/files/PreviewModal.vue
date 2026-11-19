@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Modal from '@/components/Modal.vue'
+import VideoPlayer from './VideoPlayer.vue'
 import { filesApi, type FileEntry } from '@/api/files'
 
 // V1 built-in viewers; V3 replaces this with the MIME-registered plugin loader.
 const props = defineProps<{ entry: FileEntry | null }>()
 const emit = defineEmits<{ close: []; download: [e: FileEntry] }>()
 
-const open = computed({ get: () => !!props.entry, set: (v) => { if (!v) emit('close') } })
+// Video has its own full player; everything else uses the generic dialog.
+const open = computed({ get: () => !!props.entry && kind.value !== 'video', set: (v) => { if (!v) emit('close') } })
 const url = computed(() => (props.entry ? filesApi.downloadUrl(props.entry.path, true) : ''))
 const kind = computed(() => {
   const m = props.entry?.mime ?? ''
@@ -19,10 +21,10 @@ const kind = computed(() => {
 </script>
 
 <template>
+  <VideoPlayer :entry="kind === 'video' ? entry : null" @close="emit('close')" @download="(e) => emit('download', e)" />
   <Modal v-model:open="open" :title="entry?.name ?? ''" wide>
     <div class="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-lg bg-black/5">
       <img v-if="kind === 'image'" :src="url" :alt="entry?.name" class="max-h-[60vh] object-contain" />
-      <video v-else-if="kind === 'video'" :src="url" controls class="max-h-[60vh] w-full" />
       <audio v-else-if="kind === 'audio'" :src="url" controls class="w-full p-6" />
       <iframe v-else :src="url" sandbox="" class="h-[60vh] w-full bg-white" :title="entry?.name" />
     </div>

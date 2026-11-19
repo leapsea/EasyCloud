@@ -52,8 +52,15 @@ func NewService(dataRoot string, files *app.FileService, s settings.Resolver, re
 		return nil, err
 	}
 	svc := &Service{files: files, settings: s, store: filestore.New(dir), dir: dir, audit: rec, log: log}
+	// Only the extensions the web client uses. Concatenation is left out on
+	// purpose: a "final" upload names other uploads by ID, and tusd neither
+	// checks their owner nor goes through Handler's owner check (creation is
+	// a POST), so it would let one user assemble another user's upload data.
+	// Downloads are disabled, so no content server either.
 	composer := tus.NewStoreComposer()
-	svc.store.UseIn(composer)
+	composer.UseCore(svc.store)
+	composer.UseTerminater(svc.store)
+	composer.UseLengthDeferrer(svc.store)
 	filelocker.New(dir).UseIn(composer)
 
 	h, err := tus.NewHandler(tus.Config{
@@ -88,6 +95,9 @@ func (s *Service) preCreate(hook tus.HookEvent) (tus.HTTPResponse, tus.FileInfoC
 	ctx := hook.Context
 	sub := httpx.SubjectFrom(ctx)
 	info := hook.Upload
+	if info.IsFinal || info.IsPartial { // see NewService: concatenation is not offered
+		return tus.HTTPResponse{}, tus.FileInfoChanges{}, tusErr(errs.ErrInvalidInput.WithDetail("Upload-Concat is not supported"))
+	}
 	if info.SizeIsDeferred {
 		return tus.HTTPResponse{}, tus.FileInfoChanges{}, tusErr(errs.ErrInvalidInput.WithDetail("Upload-Length is required"))
 	}
@@ -129,16 +139,29 @@ func (s *Service) preFinish(hook tus.HookEvent) (tus.HTTPResponse, error) {
 	return tus.HTTPResponse{Header: tus.HTTPHeader{"X-Easycloud-Path": e.Path}}, nil
 }
 
-// Handler wraps tusd with an owner check so one user cannot PATCH another's upload.
+// Handler wraps tusd with an owner check so one user cannot read, append to
+// or terminate another user's upload.
+//
+// The check applies to every request that names an upload, whatever its
+// method: tusd turns "POST + X-HTTP-Method-Override: PATCH|HEAD|DELETE" into
+// that method after this wrapper has run, so trusting r.Method here would
+// let such a request skip the check. The override header is refused outright
+// as well, as is Upload-Concat; the web client sends neither.
 func (s *Service) Handler() http.Handler {
 	inner := http.StripPrefix(strings.TrimSuffix(BasePath, "/"), s.handler)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-HTTP-Method-Override") != "" {
+			httpx.WriteError(w, r, s.log, errs.ErrInvalidInput.WithDetail("X-HTTP-Method-Override is not supported"))
+			return
+		}
+		if r.Header.Get("Upload-Concat") != "" { // see NewService: concatenation is not offered
+			httpx.WriteError(w, r, s.log, errs.ErrInvalidInput.WithDetail("Upload-Concat is not supported"))
+			return
+		}
 		id := strings.Trim(strings.TrimPrefix(r.URL.Path, BasePath), "/")
-		if id != "" && r.Method != http.MethodPost {
-			if !s.ownedBy(r.Context(), id, httpx.Subject(r).UserID) {
-				http.NotFound(w, r)
-				return
-			}
+		if id != "" && !s.ownedBy(r.Context(), id, httpx.Subject(r).UserID) {
+			http.NotFound(w, r)
+			return
 		}
 		inner.ServeHTTP(w, r)
 	})

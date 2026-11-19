@@ -60,7 +60,7 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=${colW.value > 256 ? 5
   <div ref="scroller" class="h-full overflow-auto p-2" @scroll="scrollTop = ($event.target as HTMLElement).scrollTop">
     <div class="relative" :style="{ height: total + 'px' }">
       <div
-        v-for="l in visible" :key="l.e.path"
+        v-for="l in visible" :key="l.e.path" :data-path="l.e.path"
         class="absolute cursor-pointer select-none overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
         :class="selected.has(l.e.path) ? 'border-brand-500 ring-2 ring-brand-500/40' : 'border-[var(--border)]'"
         :style="{ top: l.top + 'px', left: l.left + 'px', width: colW + 'px' }"

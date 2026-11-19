@@ -279,6 +279,30 @@ func (s *FileService) Open(ctx context.Context, sub pathguard.Subject, raw strin
 	return f, toEntry(p, fi), nil
 }
 
+// OpenEntry opens a file or directory read-only for inspection (details such
+// as the creation time); it needs the same read permission as Open.
+func (s *FileService) OpenEntry(ctx context.Context, sub pathguard.Subject, raw string) (*os.File, domain.FileEntry, error) {
+	p, h, err := s.check(ctx, sub, raw, pathguard.PermRead)
+	if err != nil {
+		return nil, domain.FileEntry{}, err
+	}
+	defer h.Close()
+	f, err := h.Root.Open(h.Rel)
+	if err != nil {
+		return nil, domain.FileEntry{}, mapFSErr(err)
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, domain.FileEntry{}, mapFSErr(err)
+	}
+	e := toEntry(p, fi)
+	if s.protector != nil && e.IsDir {
+		e.Protected = s.protector.Protected(ctx, p)
+	}
+	return f, e, nil
+}
+
 func (s *FileService) Mkdir(ctx context.Context, sub pathguard.Subject, raw string) (domain.FileEntry, error) {
 	p, h, err := s.check(ctx, sub, raw, pathguard.PermWrite)
 	if err != nil {

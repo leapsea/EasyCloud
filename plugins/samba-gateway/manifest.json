@@ -1,7 +1,7 @@
 {
   "id": "samba-gateway",
   "name": "Samba 网关",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "backend",
   "description": "通过 SMB 共享被授权的目录（Windows/macOS 网络磁盘）。账户使用各用户在「我的账号」中生成的应用密码；可选由插件管理 Samba 容器。",
   "author": "EasyCloud",

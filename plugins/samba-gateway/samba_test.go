@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -42,16 +43,113 @@ func TestRender(t *testing.T) {
 	if strings.Contains(strings.SplitN(aa, "\n[", 2)[0], "write list") {
 		t.Error("read-only share has a write list")
 	}
-	pw := smbpasswd(snap)
+	uids, _ := assignUIDs(nil, snap.Accounts)
+	pw := smbpasswd(snap, uids)
 	if !strings.Contains(pw, "alice:") || !strings.Contains(pw, ":8846F7EAEE8FB117AD06BDD830B7586C:[U") {
 		t.Fatalf("smbpasswd %q", pw)
 	}
-	entry, reload := scripts(c, snap)
+	entry, reload := scripts(c, snap, uids)
 	if !strings.Contains(entry, "exec smbd --foreground") || !strings.Contains(reload, "reload-config") || !strings.Contains(entry, "adduser -D -H -u") {
 		t.Fatal("scripts")
 	}
-	if uidFor("alice") != uidFor("alice") || uidFor("alice") < 20000 {
-		t.Fatal("uid not stable")
+	if !strings.Contains(pw, fmt.Sprintf("alice:%d:", uids["alice"])) || !strings.Contains(entry, fmt.Sprintf("-u %d alice", uids["alice"])) {
+		t.Fatal("smbpasswd and scripts disagree on alice's uid")
+	}
+}
+
+// Two names that collided under the old crc32 scheme used to break the second
+// account; allocation keeps every uid unique and stable.
+func TestUIDAllocation(t *testing.T) {
+	seen := map[int]string{}
+	var a, b string
+	for i := 0; a == ""; i++ {
+		n := fmt.Sprintf("user%d", i)
+		if o, ok := seen[legacyUID(n)]; ok {
+			a, b = o, n
+		}
+		seen[legacyUID(n)] = n
+	}
+	acct := func(names ...string) []pluginsdk.Account {
+		var out []pluginsdk.Account
+		for _, n := range names {
+			out = append(out, pluginsdk.Account{Username: n})
+		}
+		return out
+	}
+	unique := func(m uidMap) {
+		t.Helper()
+		got := map[int]string{}
+		for n, u := range m {
+			if o, ok := got[u]; ok {
+				t.Fatalf("%s and %s share uid %d", o, n, u)
+			}
+			if u < uidBase {
+				t.Fatalf("%s got uid %d", n, u)
+			}
+			got[u] = n
+		}
+	}
+
+	// First run (no uids.json): legacy uids are kept where unique, so users
+	// already created in a running container stay consistent.
+	m, changed := assignUIDs(nil, acct(b, a, "carol"))
+	if !changed {
+		t.Fatal("first run must write uids.json")
+	}
+	unique(m)
+	first, second := a, b
+	if second < first {
+		first, second = second, first
+	}
+	if m[first] != legacyUID(first) || m["carol"] != legacyUID("carol") {
+		t.Fatalf("legacy uids not kept: %v", m)
+	}
+	if m[second] == legacyUID(second) {
+		t.Fatal("colliding name kept the duplicate uid")
+	}
+
+	// Stable across syncs.
+	again, changed := assignUIDs(m, acct("carol", a, b))
+	if changed || again[a] != m[a] || again[b] != m[b] {
+		t.Fatalf("uids changed on resync: %v", again)
+	}
+
+	// A removed account keeps its entry; its uid is never handed out again.
+	carol := m["carol"]
+	m, _ = assignUIDs(m, acct(a, b, "dave"))
+	unique(m)
+	if m["carol"] != carol || m["dave"] == carol {
+		t.Fatalf("carol's uid reused: %v", m)
+	}
+
+	// Reserved uids (force user/group) are skipped.
+	m, _ = assignUIDs(uidMap{"x": uidBase}, acct("x", "y"), uidBase+1)
+	if m["y"] != uidBase+2 {
+		t.Fatalf("y = %d, want %d", m["y"], uidBase+2)
+	}
+}
+
+func TestSyncWritesConsistentUIDs(t *testing.T) {
+	dir := t.TempDir()
+	e := &ext{}
+	e.cfg.OutputDir = dir
+	e.cfg.defaults()
+	req := &pluginsdk.SyncRequest{Accounts: []pluginsdk.Account{{Username: "alice", NTHash: "AA"}, {Username: "bob", NTHash: "BB"}}}
+	for i := 0; i < 2; i++ {
+		if _, err := e.Sync(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, err := loadUIDs(filepath.Join(dir, "uids.json"))
+	if err != nil || len(m) != 2 {
+		t.Fatalf("uids.json: %v %v", m, err)
+	}
+	pw, _ := os.ReadFile(filepath.Join(dir, "smbpasswd"))
+	entry, _ := os.ReadFile(filepath.Join(dir, "entrypoint.sh"))
+	for n, u := range m {
+		if !strings.Contains(string(pw), fmt.Sprintf("%s:%d:", n, u)) || !strings.Contains(string(entry), fmt.Sprintf("-u %d %s", u, n)) {
+			t.Fatalf("%s: uid %d not used consistently", n, u)
+		}
 	}
 }
 

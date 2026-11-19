@@ -39,13 +39,24 @@ func (e *ext) Sync(ctx context.Context, req *pluginsdk.SyncRequest) (*pluginsdk.
 	if err := os.MkdirAll(out, 0o750); err != nil {
 		return nil, err
 	}
-	entry, reload := scripts(c, req)
+	uidPath := filepath.Join(out, "uids.json")
+	prev, err := loadUIDs(uidPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", uidPath, err)
+	}
+	uids, changed := assignUIDs(prev, req.Accounts, c.ForceUID, c.ForceGID)
+	if changed { // written first: smbpasswd and the scripts must agree with it
+		if err := writeAtomic(uidPath, uids.encode(), 0o640); err != nil {
+			return nil, fmt.Errorf("write %s: %w", uidPath, err)
+		}
+	}
+	entry, reload := scripts(c, req, uids)
 	files := []struct {
 		name, content string
 		mode          os.FileMode
 	}{
 		{"smb.conf", smbConf(c, req), 0o644},
-		{"smbpasswd", smbpasswd(req), 0o600}, // NT hashes are password-equivalent
+		{"smbpasswd", smbpasswd(req, uids), 0o600}, // NT hashes are password-equivalent
 		{"entrypoint.sh", entry, 0o755},
 		{"reload.sh", reload, 0o755},
 	}

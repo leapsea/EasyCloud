@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"hash/crc32"
 	"sort"
 	"strings"
 
@@ -53,9 +52,6 @@ func (c *config) defaults() {
 		c.SMBPort = 445
 	}
 }
-
-// uidFor gives every account a stable unix uid inside the container.
-func uidFor(name string) int { return 20000 + int(crc32.ChecksumIEEE([]byte(name))%40000) }
 
 func quoteList(us []string) string {
 	q := make([]string, len(us))
@@ -117,25 +113,25 @@ func smbConf(c config, req *pluginsdk.SyncRequest) string {
 }
 
 // smbpasswd renders the smbpasswd file (NT hashes only; no LM hashes).
-func smbpasswd(req *pluginsdk.SyncRequest) string {
+func smbpasswd(req *pluginsdk.SyncRequest, uids uidMap) string {
 	var b strings.Builder
 	accts := append([]pluginsdk.Account{}, req.Accounts...)
 	sort.Slice(accts, func(i, j int) bool { return accts[i].Username < accts[j].Username })
 	for _, a := range accts {
-		fmt.Fprintf(&b, "%s:%d:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:%s:[U          ]:LCT-00000000:\n", a.Username, uidFor(a.Username), a.NTHash)
+		fmt.Fprintf(&b, "%s:%d:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:%s:[U          ]:LCT-00000000:\n", a.Username, uids[a.Username], a.NTHash)
 	}
 	return b.String()
 }
 
 // entrypoint creates matching unix users, then runs smbd in the foreground.
 // reload.sh does the same for running containers.
-func scripts(c config, req *pluginsdk.SyncRequest) (entry, reload string) {
+func scripts(c config, req *pluginsdk.SyncRequest, uids uidMap) (entry, reload string) {
 	var users strings.Builder
 	fmt.Fprintf(&users, "#!/bin/sh\nset -e\n")
 	fmt.Fprintf(&users, "getent group easycloud >/dev/null || addgroup -g %d easycloud 2>/dev/null || groupadd -g %d easycloud\n", c.ForceGID, c.ForceGID)
 	fmt.Fprintf(&users, "getent passwd easycloud >/dev/null || adduser -D -H -u %d -G easycloud easycloud 2>/dev/null || useradd -M -u %d -g easycloud easycloud\n", c.ForceUID, c.ForceUID)
 	for _, a := range req.Accounts {
-		fmt.Fprintf(&users, "getent passwd %[1]s >/dev/null || adduser -D -H -u %[2]d %[1]s 2>/dev/null || useradd -M -u %[2]d %[1]s\n", a.Username, uidFor(a.Username))
+		fmt.Fprintf(&users, "getent passwd %[1]s >/dev/null || adduser -D -H -u %[2]d %[1]s 2>/dev/null || useradd -M -u %[2]d %[1]s\n", a.Username, uids[a.Username])
 	}
 	common := users.String()
 	entry = common + "mkdir -p /var/lib/samba/private /run/samba\nexec smbd --foreground --no-process-group --debug-stdout --configfile=/config/smb.conf\n"

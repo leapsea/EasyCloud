@@ -2,6 +2,12 @@ import { qs, request } from './client'
 
 export interface FileEntry { name: string; path: string; isDir: boolean; size: number; modTime: string; mime?: string; width?: number; height?: number; thumb?: boolean; protected?: boolean }
 export type Access = 'rw' | 'r' | 'nav'
+export interface MediaInfo {
+  source: 'ffprobe' | 'builtin'; container?: string; duration?: number; bitrate?: number
+  video?: { codec?: string; profile?: string; width?: number; height?: number; fps?: number; bitrate?: number; pixFmt?: string }
+  audio?: { codec?: string; sampleRate?: number; channels?: number; bitrate?: number }
+}
+export interface FileDetails extends FileEntry { createdAt?: string; media?: MediaInfo; image?: { width: number; height: number; format?: string } }
 export interface Listing { path: string; access: Access; entries: FileEntry[] }
 export interface SearchHit extends FileEntry { width?: number; height?: number }
 export interface TrashItem { id: string; originPath: string; isDir: boolean; size: number; deletedAt: string; expireAt: string }
@@ -19,6 +25,10 @@ export const filesApi = {
   search: (q: string, path?: string) =>
     request<{ items: SearchHit[]; truncated: boolean }>('GET', `/api/files/search?${qs(path ? { q, path } : { q })}`),
   usage: (path: string) => request<{ bytes: number; files: number }>('GET', `/api/files/usage?${qs({ path })}`),
+  // Player: whether a video is streamed with a playback fix (see internal/media/mp4fix).
+  playback: (path: string) => request<{ fixed: boolean; reasons: string[] }>('GET', `/api/files/playback?${qs({ path })}`),
+  details: (path: string) => request<FileDetails>('GET', `/api/files/details?${qs({ path })}`),
+  streamUrl: (path: string) => `/api/files/stream?${qs({ path })}`,
   downloadUrl: (path: string, inline = false) =>
     `/api/files/download?${qs(inline ? { path, inline: '1' } : { path })}`,
 }

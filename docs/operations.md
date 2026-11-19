@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 数据根（`EASYCLOUD_DATA_ROOT`，容器 `/data`） | 你的文件，结构与宿主机一致 | 按你的常规文件备份策略 |
 | 数据根下 `.easycloud/` | 回收站、上传分片、`instance.json`（实例 ID） | 随数据根一起备份；不要单独删除 `instance.json` |
-| 应用数据（`EASYCLOUD_APP_DATA`，容器 `/config`） | `easycloud.db`（SQLite）、`metrics/`（Pebble）、`thumbs/`（可重建）、`plugins/` | 备份 `easycloud.db`（或 MariaDB）与 `plugins/`；`thumbs/` 可不备份 |
+| 应用数据（`EASYCLOUD_APP_DATA`，容器 `/config`） | `easycloud.db`（SQLite）、`metrics/`（Pebble）、`thumbs/`（可重建）、`playback/`（视频播放修正缓存，可重建）、`plugins/` | 备份 `easycloud.db`（或 MariaDB）与 `plugins/`；`thumbs/`、`playback/` 可不备份 |
 | 日志（`EASYCLOUD_LOG_DIR`，容器 `/logs`，可选） | `easycloud.log` 及 `.1`…`.5`（每个 20 MB） | 不需要 |
 
 `.easycloud` 必须与数据根位于同一文件系统（回收站与上传完成都依赖原子 rename），启动时会校验。
@@ -88,6 +88,19 @@ echo fs.inotify.max_user_watches=1048576 | sudo tee /etc/sysctl.d/90-easycloud.c
 ```
 
 在宿主机上改名或移动目录时，授权与分享会依据 inode 自动跟随新路径。
+
+## 视频播放修正
+
+网页播放器打开 MP4/MOV 前会先分析文件，遇到以下情况时改为播放「修正后的虚拟文件」：新生成的文件头（ftyp + moov）加上源文件中原样的音视频数据。**源文件不会被修改或复制，也不转码**，拖动进度正常（标准 Range 请求）。
+
+| 问题 | 现象 | 修正 |
+| --- | --- | --- |
+| H.264 含 B 帧但缺少 ctts（帧显示时间偏移） | VLC 正常，浏览器、QuickTime 卡顿/丢帧 | 从每帧 slice 头的 POC 计算显示顺序，补上 ctts |
+| moov（索引）在文件末尾 | 大文件起播、拖动慢 | 把 moov 放到开头 |
+
+- 播放器标题栏显示「已修正播放」，悬停可见原因；修正流出错时自动退回直接播放原文件。
+- 分析需要顺序读一遍文件（只解析帧头）：3 小时 1080p、7.9 GB 的文件在 SSD 上约 1.5 秒，机械硬盘约受顺序读速度限制（约 40–50 秒）。结果按「路径 + 大小 + 修改时间」缓存在 `playback/`，文件变化后自动重新分析，90 天未使用的缓存会被清理。
+- 浏览器无法解码的编码（如 HEVC、MKV 容器）不在此范围，仍需下载后用本地播放器打开。
 
 ## 协议访问
 

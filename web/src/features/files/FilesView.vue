@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import { t as tr } from '@/i18n'
-import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, Ellipsis, FolderInput, FolderOpen, FolderPlus, LayoutGrid, List, PackageOpen, PencilLine, RotateCw, Search, Share2, Trash2, Upload, X } from 'lucide-vue-next'
-import { DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger } from 'reka-ui'
+import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, Ellipsis, ExternalLink, FolderInput, FolderOpen, FolderPlus, Info, LayoutGrid, List, PackageOpen, PencilLine, RotateCw, Search, Share2, Trash2, Upload, X } from 'lucide-vue-next'
+import {
+  ContextMenuContent, ContextMenuItem, ContextMenuPortal, ContextMenuRoot, ContextMenuSeparator, ContextMenuTrigger,
+  DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger,
+} from 'reka-ui'
 import FileIcon from '@/components/FileIcon.vue'
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -17,6 +20,7 @@ import Modal from '@/components/Modal.vue'
 import FolderPicker from './FolderPicker.vue'
 import PreviewModal from './PreviewModal.vue'
 import GalleryView from './GalleryView.vue'
+import DetailsPanel from './DetailsPanel.vue'
 import ImageLightbox from './ImageLightbox.vue'
 import PluginViewer from '@/plugins/PluginViewer.vue'
 import ShareDialog from '@/features/share/ShareDialog.vue'
@@ -220,6 +224,29 @@ function clickRow(e: FileEntry, ev: MouseEvent) {
   }
   selected.value = s
 }
+// Context menu: right-clicking an unselected item selects just it (as in
+// desktop file managers); on a multi-selection the actions apply to all of it.
+// Rows and tiles carry data-path; an empty area gives the folder's menu.
+const ctxEntry = ref<FileEntry | null>(null)
+function onContextMenu(ev: MouseEvent) {
+  const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-path]')
+  const e = el ? entries.value.find((x) => x.path === el.dataset.path) ?? null : null
+  ctxEntry.value = e
+  if (e && !selected.value.has(e.path)) {
+    selected.value = new Set([e.path])
+    anchor = e.path
+  }
+}
+const ctxMulti = computed(() => !!ctxEntry.value && selected.value.size > 1)
+const menuItem = 'flex cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-[var(--surface-muted)]'
+
+// Details panel: docked beside the list on wide screens, a drawer otherwise.
+// While open it follows a single selection, and the current folder on navigation.
+const detailsPath = ref<string | null>(null)
+const dockDetails = useMediaQuery('(min-width: 1024px)')
+watch(selectedEntries, (s) => { if (detailsPath.value && s.length === 1) detailsPath.value = s[0].path })
+watch(dir, (d) => { if (detailsPath.value && detailsPath.value !== d && parentPath(detailsPath.value) !== d) detailsPath.value = d })
+
 function toggle(e: FileEntry) {
   const s = new Set(selected.value)
   s.has(e.path) ? s.delete(e.path) : s.add(e.path)
@@ -352,7 +379,8 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
       </span>
     </PageHeader>
 
-    <div class="card relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="flex min-h-0 flex-1 gap-3">
+    <div class="card relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <!-- Card toolbar: actions left, search and view right. Fixed height and never wraps,
            so selecting rows cannot move the list between the two clicks of a double-click. -->
       <div class="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3">
@@ -410,6 +438,9 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
         </div>
       </div>
 
+      <ContextMenuRoot>
+      <ContextMenuTrigger as-child>
+      <div class="flex min-h-0 flex-1 flex-col" @contextmenu="onContextMenu">
       <GalleryView v-if="viewMode === 'grid' && entries.length" :entries="entries" :selected="selected" class="min-h-0 flex-1" @open="open" @select="clickRow" />
       <div v-if="viewMode === 'list'" class="col-header muted grid h-9 shrink-0 select-none items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs" :style="{ gridTemplateColumns: gridCols }">
         <input type="checkbox" :checked="allSelected" :aria-label="$t('files.selectAll')" @change="toggleAll" />
@@ -448,7 +479,7 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
         </div>
         <div v-else :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
-            v-for="r in rows" :key="entries[r.index].path"
+            v-for="r in rows" :key="entries[r.index].path" :data-path="entries[r.index].path"
             class="absolute left-0 top-0 grid w-full cursor-default select-none items-center gap-2 px-3 text-sm"
             :class="selected.has(entries[r.index].path) ? 'bg-brand-50' : 'hover:bg-[var(--surface-muted)]'"
             :style="{ height: `${r.size}px`, transform: `translateY(${r.start}px)`, gridTemplateColumns: gridCols }"
@@ -468,12 +499,66 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
           </div>
         </div>
       </div>
+      </div>
+      </ContextMenuTrigger>
+      <ContextMenuPortal>
+        <ContextMenuContent class="z-50 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]">
+          <template v-if="ctxEntry">
+            <ContextMenuItem v-if="!ctxMulti" :class="menuItem" @select="open(ctxEntry)"><ExternalLink class="h-3.5 w-3.5" />{{ $t('files.ctx.open') }}</ContextMenuItem>
+            <ContextMenuItem v-if="!ctxMulti && !ctxEntry.isDir" :class="menuItem" @select="download(ctxEntry)"><Download class="h-3.5 w-3.5" />{{ $t('common.download') }}</ContextMenuItem>
+            <ContextMenuItem v-else :class="menuItem" @select="downloadZip"><Download class="h-3.5 w-3.5" />{{ $t('files.downloadZip') }}</ContextMenuItem>
+            <ContextMenuItem v-if="access !== 'nav'" :class="menuItem" :disabled="ctxMulti" @select="shareTarget = ctxEntry"><Share2 class="h-3.5 w-3.5" />{{ $t('files.share') }}</ContextMenuItem>
+            <ContextMenuSeparator class="my-1 h-px bg-[var(--border)]" />
+            <template v-if="canWrite">
+              <ContextMenuItem :class="menuItem" :disabled="ctxMulti || hasProtected" @select="startRename"><PencilLine class="h-3.5 w-3.5" />{{ $t('files.rename') }}</ContextMenuItem>
+              <ContextMenuItem :class="menuItem" :disabled="hasProtected" @select="picker = { open: true, mode: 'move' }"><FolderInput class="h-3.5 w-3.5" />{{ $t('files.moveTo') }}</ContextMenuItem>
+            </template>
+            <ContextMenuItem v-if="access !== 'nav'" :class="menuItem" @select="picker = { open: true, mode: 'copy' }"><Copy class="h-3.5 w-3.5" />{{ $t('files.copyTo') }}</ContextMenuItem>
+            <ContextMenuItem v-if="canWrite && !ctxMulti && isArchive(ctxEntry)" :class="menuItem" @select="extract(ctxEntry)"><PackageOpen class="h-3.5 w-3.5" />{{ $t('files.extract') }}</ContextMenuItem>
+            <ContextMenuSeparator class="my-1 h-px bg-[var(--border)]" />
+            <ContextMenuItem :class="menuItem" :disabled="ctxMulti" @select="detailsPath = ctxEntry.path"><Info class="h-3.5 w-3.5" />{{ $t('files.ctx.details') }}</ContextMenuItem>
+            <template v-if="canWrite">
+              <ContextMenuSeparator class="my-1 h-px bg-[var(--border)]" />
+              <ContextMenuItem :class="[menuItem, 'text-red-600 data-[highlighted]:bg-red-50 dark:text-red-400 dark:data-[highlighted]:bg-red-500/10']" :disabled="hasProtected" @select="deleteOpen = true">
+                <Trash2 class="h-3.5 w-3.5" />{{ ctxMulti ? $t('files.ctx.deleteN', { n: selected.size }) : $t('common.delete') }}
+              </ContextMenuItem>
+            </template>
+            <p v-if="hasProtected && canWrite" class="max-w-56 px-2.5 pb-1 pt-1.5 text-[11px] leading-4 text-[var(--text-muted)]">{{ protectedTip }}</p>
+          </template>
+          <template v-else>
+            <template v-if="canWrite">
+              <ContextMenuItem :class="menuItem" @select="pickFiles"><Upload class="h-3.5 w-3.5" />{{ $t('files.upload') }}</ContextMenuItem>
+              <ContextMenuItem :class="menuItem" @select="mkdirName = ''; mkdirOpen = true"><FolderPlus class="h-3.5 w-3.5" />{{ $t('files.newFolder') }}</ContextMenuItem>
+            </template>
+            <ContextMenuItem :class="menuItem" @select="load(true)"><RotateCw class="h-3.5 w-3.5" />{{ $t('files.refresh') }}</ContextMenuItem>
+            <ContextMenuSeparator class="my-1 h-px bg-[var(--border)]" />
+            <ContextMenuItem :class="menuItem" @select="detailsPath = dir"><Info class="h-3.5 w-3.5" />{{ $t('files.ctx.folderDetails') }}</ContextMenuItem>
+          </template>
+        </ContextMenuContent>
+      </ContextMenuPortal>
+      </ContextMenuRoot>
       <Transition name="fade">
         <div v-if="dragging" class="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-brand-500 bg-brand-50/90 text-brand-700">
           {{ $t('files.dropTo', { dir }) }}
         </div>
       </Transition>
     </div>
+    <div v-if="detailsPath && dockDetails" class="card w-80 shrink-0 overflow-hidden">
+      <DetailsPanel :path="detailsPath" @close="detailsPath = null" @navigate="navigate" />
+    </div>
+    </div>
+    <!-- Narrow screens: the same panel as a drawer from the right. -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="detailsPath && !dockDetails" class="fixed inset-0 z-40 bg-slate-900/30" @click="detailsPath = null" />
+      </Transition>
+      <div
+        v-if="detailsPath && !dockDetails"
+        class="fixed inset-y-0 right-0 z-40 w-[min(22rem,100vw)] border-l border-[var(--border)] shadow-[var(--shadow-pop)]"
+      >
+        <DetailsPanel :path="detailsPath" @close="detailsPath = null" @navigate="(d) => { navigate(d); detailsPath = null }" />
+      </div>
+    </Teleport>
 
     <Modal v-model:open="mkdirOpen" :title="$t('files.newFolder')">
       <form @submit.prevent="doMkdir">
