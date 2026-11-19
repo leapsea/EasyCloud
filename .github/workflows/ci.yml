@@ -1,5 +1,5 @@
 # Pushes to main and pull requests: full tests; on main also the image
-# ghcr.io/<owner>/<repo>:main / :sha-<short sha>.
+# ghcr.io/<owner>/<repo>:latest / :sha-<short sha>.
 # Releases: release.yml (app, tags v*) and plugins.yml (plugins/<id>/v*).
 name: ci
 on:

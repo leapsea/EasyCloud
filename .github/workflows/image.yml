@@ -1,8 +1,9 @@
 # Builds and pushes the multi-arch image ghcr.io/<owner>/<repo>, reused by
 # ci.yml (main branch) and release.yml (tags v*). Tags:
-#   main branch push  -> :main  :sha-<short sha>   (app version dev-<short sha>)
-#   tag v1.2.3        -> :1.2.3 :1.2 :latest       (app version 1.2.3)
-#   tag v1.2.3-rc.1   -> :1.2.3-rc.1               ("latest" never moves for pre-releases)
+#   main branch push  -> :latest :sha-<short sha>  (app version dev-<short sha>)
+#   tag v1.2.3        -> :1.2.3 :1.2               (app version 1.2.3)
+#   tag v1.2.3-rc.1   -> :1.2.3-rc.1
+# :latest follows main only, so tagging an older commit never moves it back.
 # The image name is lower-cased by metadata-action (GHCR requires it).
 name: image
 on:
@@ -13,7 +14,7 @@ permissions: { contents: read, packages: write }
 jobs:
   image:
     runs-on: ubuntu-latest
-    # One push per ref at a time, so an older commit cannot overwrite :main last.
+    # One push per ref at a time, so an older commit cannot overwrite :latest last.
     concurrency: { group: "image-${{ github.ref }}", cancel-in-progress: false }
     steps:
       - uses: actions/checkout@v5
@@ -32,11 +33,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          flavor: latest=auto # latest only for final semver tags
+          flavor: latest=false # :latest comes only from the raw tag below
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,enable=${{ github.ref_type == 'branch' }}
       - uses: docker/build-push-action@v6
         with:

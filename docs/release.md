@@ -35,13 +35,15 @@ git tag v0.5.0 && git push origin v0.5.0
 `release.yml` 先跑完整测试（复用 `test.yml`），再并行：
 
 - **binaries**：linux amd64/arm64 二进制、`install.sh`、`checksums.txt` 发布到 Release，并标为 latest（`install.sh` 从 `releases/latest` 下载）。
-- **image**：多架构镜像，标签 `0.5.0`、`0.5`、`latest`；最后匿名拉取并运行 `easycloud version` 验证。
+- **image**：多架构镜像，标签 `0.5.0`、`0.5`（`latest` 只由 main 分支更新）；最后匿名拉取并运行 `easycloud version` 验证。
 
-预发布标签（`v0.5.0-rc.1`）发布为 pre-release，镜像只打 `0.5.0-rc.1`，不会移动 `latest`。
+预发布标签（`v0.5.0-rc.1`）发布为 pre-release，镜像只打 `0.5.0-rc.1`。
 
 ## 分支镜像（main）
 
-推送到 `main` 时，`ci.yml` 先跑 `test.yml`，测试通过且本次推送改动了程序（不只是 `plugins/`、`docs/`、`*.md`、`plugins.yml`）时，调用 `image.yml` 构建并推送 `ghcr.io/leapsea/easycloud:main` 与 `:sha-<短SHA>`，程序版本为 `dev-<短SHA>`（插件兼容检查视为开发版）。Pull Request 只跑测试，不推镜像。
+推送到 `main` 时，`ci.yml` 先跑 `test.yml`，测试通过且本次推送改动了程序（不只是 `plugins/`、`docs/`、`*.md`、`plugins.yml`）时，调用 `image.yml` 构建并推送 `ghcr.io/leapsea/easycloud:latest` 与 `:sha-<短SHA>`，程序版本为 `dev-<短SHA>`（插件兼容检查视为开发版）。Pull Request 只跑测试，不推镜像。`latest` 始终是 main 的最新代码，给旧提交打版本 tag 不会让它回退；需要固定版本时使用 `:<版本号>` 或 `:sha-<短SHA>`。
+
+测试（`test.yml`）拆为三个并行任务：`frontend`（类型检查与构建）、`lint`（gofmt、vet、10 秒模糊测试、脚本语法、插件版本检查）、`go-test`（MariaDB + race 测试；ffmpeg 安装包按 runner 镜像版本缓存，测试二进制先并行编译再串行运行）。
 
 | 文件 | 作用 |
 | --- | --- |

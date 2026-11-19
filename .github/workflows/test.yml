@@ -1,5 +1,6 @@
 # Full test suite, reused by ci.yml (pushes, pull requests) and release.yml
-# (before publishing a release).
+# (before publishing a release). Three independent jobs run in parallel; the
+# wall time is that of go-test.
 name: test
 on:
   workflow_call:
@@ -7,7 +8,34 @@ on:
 permissions: { contents: read }
 
 jobs:
-  test:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Type-check and build
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: web
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 } # tags, for the plugin version check
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod }
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      # Short run on every push; new findings show up within seconds, and the
+      # corpus keeps the regression cases.
+      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=10s ./internal/pathguard
+      - name: Script syntax
+        run: sh -n deploy/install.sh && bash -n scripts/build-plugins.sh && sh -n deploy/docker/entrypoint.sh
+      - name: Changed plugins have a new version
+        run: scripts/check-plugin-versions.sh
+
+  go-test:
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -25,23 +53,38 @@ jobs:
       EASYCLOUD_TEST_MARIADB: "127.0.0.1:3306:easycloud:ci-password:easycloud_test"
     steps:
       - uses: actions/checkout@v5
-        with: { fetch-depth: 0 } # tags, for the plugin version check
-      - uses: actions/setup-node@v5
-        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
-      - name: Frontend type-check and build
-        run: npm ci && npm run build
-        working-directory: web
       - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
-      # ffmpeg for the thumbnail tests; recommends pull in ~90 unrelated packages
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
-      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-      - run: go vet ./...
+      # ffmpeg (for the thumbnail plugin test) from cached .deb files: apt mirrors
+      # are sometimes very slow (8+ minutes for ~70 MB). The key follows the runner
+      # image version; a new image restores the previous debs and only falls back
+      # to apt when they no longer install.
+      # ImageOS / ImageVersion are runner machine variables, not visible to ${{ env }}.
+      - id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT" && echo "version=$ImageVersion" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: ffmpeg
+        with:
+          path: ~/ffmpeg-debs
+          key: ffmpeg-${{ steps.image.outputs.os }}-${{ steps.image.outputs.version }}
+          restore-keys: ffmpeg-${{ steps.image.outputs.os }}-
+      - name: Install ffmpeg
+        run: |
+          debs=~/ffmpeg-debs
+          if ls "$debs"/*.deb >/dev/null 2>&1 && sudo dpkg -i "$debs"/*.deb >/dev/null 2>&1 && ffmpeg -version >/dev/null; then
+            echo "installed from cache"; exit 0
+          fi
+          rm -rf "$debs"; mkdir -p "$debs/partial"
+          sudo apt-get update -qq
+          # apt (not dpkg) installs, so a half-installed cache restore is repaired too;
+          # the downloaded debs stay in $debs for the next run
+          sudo apt-get install -y -qq --no-install-recommends -o Dir::Cache::archives="$debs" ffmpeg
+          sudo rm -rf "$debs/partial" && sudo chown -R "$USER" "$debs"
+          ffmpeg -version | head -1
+      # Compile all race-enabled test binaries in parallel first: "-p 1" below
+      # would otherwise serialise the build as well, not just the test runs.
+      # (No TestMain in the repo, so "-run=^$" touches no database.)
+      - name: Build tests
+        run: go test -race -run='^$' ./... > /dev/null
       # -p 1: tests share the MariaDB test database
       - run: go test -race -p 1 ./...
-      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=30s ./internal/pathguard
-      - name: Script syntax
-        run: sh -n deploy/install.sh && bash -n scripts/build-plugins.sh && sh -n deploy/docker/entrypoint.sh
-      - name: Changed plugins have a new version
-        run: scripts/check-plugin-versions.sh
-
