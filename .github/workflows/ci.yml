@@ -1,46 +1,45 @@
+# Pushes to main and pull requests: full tests; on main also the image
+# ghcr.io/<owner>/<repo>:main / :sha-<short sha>.
+# Releases: release.yml (app, tags v*) and plugins.yml (plugins/<id>/v*).
 name: ci
-# Tests only. Releases: release.yml (app, tags v*) and plugins.yml (plugins/<id>/v*).
 on:
   push:
     branches: [main]
   pull_request:
-  workflow_call: # release.yml runs the same checks before publishing
+
+# A newer push to the same PR cancels the running check; on main every run finishes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: { contents: read }
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    services:
-      mariadb:
-        image: mariadb:11.4
-        env:
-          MARIADB_DATABASE: easycloud_test
-          MARIADB_USER: easycloud
-          MARIADB_PASSWORD: ci-password
-          MARIADB_RANDOM_ROOT_PASSWORD: "yes"
-        ports: ["3306:3306"]
-        options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
-          --health-interval 5s --health-timeout 5s --health-retries 30
-    env:
-      EASYCLOUD_TEST_MARIADB: "127.0.0.1:3306:easycloud:ci-password:easycloud_test"
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 } # tags, for the plugin version check
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
-      - name: Frontend type-check and build
-        run: npm ci && npm run build
-        working-directory: web
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-      - run: go vet ./...
-      # -p 1: tests share the MariaDB test database
-      - run: go test -race -p 1 ./...
-      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=30s ./internal/pathguard
-      - name: Script syntax
-        run: sh -n deploy/install.sh && bash -n scripts/build-plugins.sh && sh -n deploy/docker/entrypoint.sh
-      - name: Changed plugins have a new version
-        run: scripts/check-plugin-versions.sh
+    uses: ./.github/workflows/test.yml
 
+  # Does this push change the program? Plugin and documentation changes do not
+  # rebuild the image (plugins are released by plugins.yml).
+  changes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - id: diff
+        env: { BEFORE: "${{ github.event.before }}" }
+        run: |
+          # First push of the branch, force push or unknown base: build.
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then echo "app=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          echo "$files"
+          if echo "$files" | grep -Evq '^(plugins/|docs/|\.github/workflows/plugins\.yml$)|\.md$'; then app=true; else app=false; fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: [test, changes]
+    if: needs.changes.outputs.app == 'true'
+    permissions: { contents: read, packages: write }
+    uses: ./.github/workflows/image.yml

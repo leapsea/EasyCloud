@@ -13,19 +13,19 @@ permissions: { contents: read }
 
 jobs:
   test:
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/test.yml
 
   binaries:
     needs: test
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
       - run: npm ci && npm run build
         working-directory: web
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: Build
         run: |
@@ -48,42 +48,5 @@ jobs:
 
   image:
     needs: test
-    runs-on: ubuntu-latest
     permissions: { contents: read, packages: write }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          # latest only for final releases (semver without pre-release part)
-          flavor: latest=auto
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          # org.opencontainers.image.source links the package to this repository
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Anonymous pull works
-        run: |
-          docker logout ghcr.io
-          img="ghcr.io/${GITHUB_REPOSITORY,,}:${{ steps.meta.outputs.version }}"
-          if ! docker pull -q "$img"; then
-            echo "::error::$img cannot be pulled without login. The GHCR package is private:"
-            echo "::error::GitHub > your profile/org > Packages > easycloud > Package settings > Change visibility > Public, then re-run this job."
-            exit 1
-          fi
-          docker run --rm "$img" version
+    uses: ./.github/workflows/image.yml

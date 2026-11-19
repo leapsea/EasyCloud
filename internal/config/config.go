@@ -83,7 +83,7 @@ func Load(yamlPath string) (*Config, error) {
 		"upload.max_file_size":          0,
 		"upload.chunk_size":             16 << 20,
 		"trash.retention_days":          30,
-		"plugins.repository":            "https://raw.githubusercontent.com/leapsea/easycloud/plugin-index/index.json",
+		"plugins.repository":            "https://raw.githubusercontent.com/leapsea/EasyCloud/plugin-index/index.json",
 		"metrics.raw_retention_days":    7,
 		"metrics.minute_retention_days": 90,
 		"log.level":                     "info",

@@ -32,12 +32,24 @@
 git tag v0.5.0 && git push origin v0.5.0
 ```
 
-`release.yml` 先跑完整测试（复用 `ci.yml`），再并行：
+`release.yml` 先跑完整测试（复用 `test.yml`），再并行：
 
 - **binaries**：linux amd64/arm64 二进制、`install.sh`、`checksums.txt` 发布到 Release，并标为 latest（`install.sh` 从 `releases/latest` 下载）。
 - **image**：多架构镜像，标签 `0.5.0`、`0.5`、`latest`；最后匿名拉取并运行 `easycloud version` 验证。
 
 预发布标签（`v0.5.0-rc.1`）发布为 pre-release，镜像只打 `0.5.0-rc.1`，不会移动 `latest`。
+
+## 分支镜像（main）
+
+推送到 `main` 时，`ci.yml` 先跑 `test.yml`，测试通过且本次推送改动了程序（不只是 `plugins/`、`docs/`、`*.md`、`plugins.yml`）时，调用 `image.yml` 构建并推送 `ghcr.io/leapsea/easycloud:main` 与 `:sha-<短SHA>`，程序版本为 `dev-<短SHA>`（插件兼容检查视为开发版）。Pull Request 只跑测试，不推镜像。
+
+| 文件 | 作用 |
+| --- | --- |
+| `test.yml` | 完整测试（可复用） |
+| `image.yml` | 多架构镜像构建、推送与匿名拉取验证（可复用） |
+| `ci.yml` | main 推送 / PR 的入口 |
+| `release.yml` | `v*` tag：测试 → 二进制 Release + 版本镜像 |
+| `plugins.yml` | 插件发布与市场索引 |
 
 ## 发布插件
 
@@ -57,7 +69,7 @@ git tag v0.5.0 && git push origin v0.5.0
 ## 插件市场索引
 
 ```
-https://raw.githubusercontent.com/leapsea/easycloud/plugin-index/index.json
+https://raw.githubusercontent.com/leapsea/EasyCloud/plugin-index/index.json
 ```
 
 - **来源**：索引不是手工维护的文件，而是每次从**所有**插件 Release 的索引条目重新生成。Release 是唯一事实来源，索引可以随时重建，不会和实际发布物不一致。
@@ -66,24 +78,6 @@ https://raw.githubusercontent.com/leapsea/easycloud/plugin-index/index.json
 - **并发**：索引推送串行执行；排队中的重建可能被更新的一次取代，因为每次重建都读取全部 Release，结果相同。
 - **镜像 / 内网**：GitHub 不可达时，可把 zip 与 `ecplugin index -base <镜像地址前缀> *.zip` 生成的索引放到任意静态服务器，并设置 `EASYCLOUD_PLUGINS_REPOSITORY`；或在「插件」页直接上传从 Release 下载的 zip。
 
-## GitLab CI 构建镜像
+## GitLab CI（已停用）
 
-自建 GitLab 使用根目录的 `.gitlab-ci.yml`，只负责构建并推送主程序镜像，和 GitHub Actions 互不影响。构建逻辑在 `scripts/ci-docker-build.sh`，本地可用 `PUSH=0 PLATFORMS=linux/amd64 IMAGE=test sh scripts/ci-docker-build.sh` 验证。
-
-| 触发 | 镜像标签 | 程序版本 |
-| --- | --- | --- |
-| tag `v1.2.3` | `1.2.3`、`1.2`、`latest` | `1.2.3` |
-| tag `v1.2.3-rc.1` | `1.2.3-rc.1` | `1.2.3-rc.1` |
-| 默认分支推送 / 手动运行 | `<分支名>`、`sha-<短SHA>` | `dev-<短SHA>` |
-
-插件 tag（`plugins/<id>/v*`）和其他 tag 不触发。
-
-前提（使用宿主机的 Docker，不用 dind）：
-
-- 项目开启 Container Registry（默认推送到 `$CI_REGISTRY_IMAGE`）；推送到别的仓库时设置 `IMAGE`、`REGISTRY`、`REGISTRY_USER`、`REGISTRY_PASSWORD`。
-- Runner `config.toml` 的 `[runners.docker]` 挂载宿主机 Docker：`volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/cache"]`。不需要 `privileged`，可以保留 `network_mode = "host"`。该 Runner 上的任务等同于拥有宿主机 root 权限，只用于自己的项目。
-- **宿主机本身**要能解析并访问镜像仓库：登录和推送由宿主机的 dockerd / buildkit 完成，任务的 `extra_hosts` 对它们无效（例如在宿主机 `/etc/hosts` 加入 `172.30.0.2 gitlab.local`）。
-- 仓库只提供 HTTP 时：宿主机 dockerd 配置 `insecure-registries`，并设置 CI 变量 `INSECURE_REGISTRY=<仓库地址:端口>`。
-- 构建器 `easycloud` 常驻在宿主机上（容器 `buildx_buildkit_easycloud0`），构建缓存随之保留；修改 `INSECURE_REGISTRY` 后，在宿主机执行 `docker rm -f buildx_buildkit_easycloud0 && docker volume rm buildx_buildkit_easycloud0_state`（构建器的元数据只存在于任务容器内，宿主机上 `docker buildx rm` 找不到它），下次构建会按新配置重建；这也会清空构建缓存。
-
-常用 CI/CD 变量：`PLATFORMS`（默认 `linux/amd64,linux/arm64`，只部署 x86 时设为 `linux/amd64` 可大幅缩短耗时）、`NODE_IMAGE` / `GO_IMAGE` / `BASE_IMAGE`（基础镜像走内网镜像仓库）、`NPM_REGISTRY` / `GOPROXY`（依赖源）。可选 `CACHE_REF` 把缓存额外写到仓库。
+`.gitlab-ci.yml` 与 `scripts/ci-docker-build.sh` 是此前为自建 GitLab 编写的镜像构建流程，现已改用 GitHub Actions；`.gitlab-ci.yml` 已被 `.gitignore` 忽略，不会提交。

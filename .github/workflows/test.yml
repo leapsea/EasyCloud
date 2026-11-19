@@ -1,0 +1,47 @@
+# Full test suite, reused by ci.yml (pushes, pull requests) and release.yml
+# (before publishing a release).
+name: test
+on:
+  workflow_call:
+
+permissions: { contents: read }
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: easycloud_test
+          MARIADB_USER: easycloud
+          MARIADB_PASSWORD: ci-password
+          MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      EASYCLOUD_TEST_MARIADB: "127.0.0.1:3306:easycloud:ci-password:easycloud_test"
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 } # tags, for the plugin version check
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Frontend type-check and build
+        run: npm ci && npm run build
+        working-directory: web
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod }
+      # ffmpeg for the thumbnail tests; recommends pull in ~90 unrelated packages
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      # -p 1: tests share the MariaDB test database
+      - run: go test -race -p 1 ./...
+      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=30s ./internal/pathguard
+      - name: Script syntax
+        run: sh -n deploy/install.sh && bash -n scripts/build-plugins.sh && sh -n deploy/docker/entrypoint.sh
+      - name: Changed plugins have a new version
+        run: scripts/check-plugin-versions.sh
+
