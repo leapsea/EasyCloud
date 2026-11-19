@@ -1,0 +1,11 @@
+{
+  "id": "markdown-viewer",
+  "name": "Markdown 预览",
+  "version": "1.0.0",
+  "type": "viewer",
+  "description": "以排版后的样式预览 Markdown 文件。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.3.0" },
+  "permissions": [],
+  "viewer": { "entry": "index.js", "mimes": ["text/markdown"], "extensions": [".md", ".markdown"], "priority": 10, "label": "Markdown 预览" }
+}

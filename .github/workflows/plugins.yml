@@ -1,0 +1,103 @@
+# Plugin releases, independent of the main program.
+#
+#   1. bump "version" in plugins/<id>/manifest.json (CI fails if a released plugin
+#      changes without a bump), merge
+#   2. git tag plugins/<id>/v<version> && git push origin plugins/<id>/v<version>
+#
+# "release" builds and signs only that plugin and publishes it as its own GitHub
+# Release (never "latest", which belongs to the app) with two assets: the package
+# and its index entry (<id>-<version>.json).
+# "index" then rebuilds index.json from the entries of ALL plugin releases and
+# pushes it to the plugin-index branch, served at
+#   https://raw.githubusercontent.com/<owner>/<repo>/plugin-index/index.json
+# Releases are the source of truth: delete one and the index drops it on the next
+# rebuild (also run on release deletion and by hand via "Run workflow").
+name: plugins
+on:
+  push:
+    tags: ["plugins/*/v*"]
+  release:
+    types: [deleted]
+  workflow_dispatch:
+
+permissions: { contents: write }
+
+jobs:
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Check tag against manifest
+        id: tag
+        run: |
+          tag=$GITHUB_REF_NAME                      # plugins/<id>/v<version>
+          id=$(echo "$tag" | cut -d/ -f2); ver=${tag##*/v}
+          m=plugins/$id/manifest.json
+          [ -f "$m" ] || { echo "::error::no $m for tag $tag"; exit 1; }
+          have=$(jq -r .version "$m")
+          [ "$have" = "$ver" ] || { echo "::error file=$m::tag says $ver but manifest.json says $have"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "name=$(jq -r .name "$m")" >> "$GITHUB_OUTPUT"
+      - name: Test the plugin
+        run: go vet ./plugins/${{ steps.tag.outputs.id }}/... && go test ./plugins/${{ steps.tag.outputs.id }}/...
+      - name: Build and sign
+        env: { SIGNING_KEY: "${{ secrets.PLUGIN_SIGNING_KEY }}" }
+        run: |
+          [ -n "$SIGNING_KEY" ] || { echo "::error::secret PLUGIN_SIGNING_KEY is not set (see docs/release.md)"; exit 1; }
+          umask 077; printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/signing.key"
+          KEY="$RUNNER_TEMP/signing.key" ONLY=${{ steps.tag.outputs.id }} scripts/build-plugins.sh
+          rm "$RUNNER_TEMP/signing.key"
+      - name: Publish release
+        run: |
+          id=${{ steps.tag.outputs.id }}; ver=${{ steps.tag.outputs.ver }}
+          zip=dist/plugins/$id-$ver.zip
+          # Notes: commits touching this plugin since its previous release.
+          prev=$(git tag -l "plugins/$id/v*" --sort=-v:refname | grep -vx "$GITHUB_REF_NAME" | head -1 || true)
+          { echo "Plugin **${{ steps.tag.outputs.name }}** ($id) $ver"; echo
+            git log --pretty='- %s (%h)' ${prev:+$prev..}"$GITHUB_REF_NAME" -- "plugins/$id"; } > notes.md
+          gh release create "$GITHUB_REF_NAME" "$zip" --title "${{ steps.tag.outputs.name }} $ver" --notes-file notes.md --latest=false
+          # The entry records the real download URL GitHub assigned to the asset.
+          url=$(gh release view "$GITHUB_REF_NAME" --json assets -q ".assets[] | select(.name==\"$id-$ver.zip\") | .url")
+          go run ./cmd/ecplugin entry -url "$url" "$zip" > "dist/plugins/$id-$ver.json"
+          gh release upload "$GITHUB_REF_NAME" "dist/plugins/$id-$ver.json"
+
+  index:
+    needs: release
+    # also for release deletion / manual runs, where "release" is skipped
+    if: always() && needs.release.result != 'failure' && needs.release.result != 'cancelled'
+    # One index push at a time. A queued rebuild may be superseded by a newer one,
+    # which is fine: every rebuild reads all releases. Releases themselves never queue.
+    concurrency: { group: plugin-index, cancel-in-progress: false }
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Collect entries of all plugin releases
+        run: |
+          mkdir -p entries
+          gh release list --limit 1000 --json tagName,isDraft -q '.[] | select(.isDraft|not) | .tagName' |
+            grep '^plugins/' | while read -r tag; do
+              gh release download "$tag" -p '*.json' -D entries --clobber || echo "::warning::$tag has no index entry"
+            done
+          ls entries
+      - name: Build index
+        run: |
+          shopt -s nullglob
+          go run ./cmd/ecplugin index entries/*.json > index.json && cat index.json
+      - name: Push to plugin-index branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch -q origin plugin-index; then git worktree add -q pub FETCH_HEAD; else git worktree add -q --orphan -b plugin-index pub; fi
+          cp index.json pub/index.json
+          printf '%s\n' "Generated by .github/workflows/plugins.yml from the plugin releases. Do not edit." > pub/README.md
+          cd pub && git add -A
+          if git diff --cached --quiet; then echo "index unchanged"; exit 0; fi
+          git commit -q -m "plugin index: ${GITHUB_REF_NAME:-rebuild}" && git push -q origin HEAD:plugin-index

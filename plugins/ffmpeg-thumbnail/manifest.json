@@ -1,0 +1,23 @@
+{
+  "id": "ffmpeg-thumbnail",
+  "name": "FFmpeg 缩略图",
+  "version": "1.0.0",
+  "type": "backend",
+  "description": "使用 ffmpeg 为视频、HEIC/HEIF 照片和相机 RAW 文件生成缩略图。需要宿主或容器中可用的 ffmpeg。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.3.0" },
+  "permissions": ["fs:read", "exec:ffmpeg"],
+  "backend": {
+    "executable": {
+      "linux/amd64": "bin/linux-amd64/ffmpeg-thumbnail",
+      "linux/arm64": "bin/linux-arm64/ffmpeg-thumbnail",
+      "darwin/arm64": "bin/darwin-arm64/ffmpeg-thumbnail",
+      "darwin/amd64": "bin/darwin-amd64/ffmpeg-thumbnail"
+    },
+    "thumbnail": ["video/*", "image/heic", "image/heif", "image/x-canon-cr2", "image/x-nikon-nef", "image/x-sony-arw", "image/x-adobe-dng"]
+  },
+  "config": [
+    { "key": "ffmpegPath", "label": "ffmpeg 路径", "type": "string", "placeholder": "留空则从 PATH 查找" },
+    { "key": "seekSeconds", "label": "视频截帧位置（秒）", "type": "number", "default": 3 }
+  ]
+}

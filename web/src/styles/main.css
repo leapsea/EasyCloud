@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+/* Dark mode follows <html data-theme>, set by the theme store (system / light / dark). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Design tokens. The whole brand palette derives from one variable, --brand,
+   which the theme store sets from the user's accent colour. */
+@theme {
+  --color-brand-50: color-mix(in oklab, var(--brand) 7%, white);
+  --color-brand-100: color-mix(in oklab, var(--brand) 15%, white);
+  --color-brand-500: color-mix(in oklab, var(--brand) 82%, white);
+  --color-brand-600: var(--brand);
+  --color-brand-700: color-mix(in oklab, var(--brand) 82%, black);
+  --radius-card: 0.75rem;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --brand: #2563eb;
+  --on-brand: #ffffff; /* text on brand backgrounds; flipped to dark for light accents */
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-sunken: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --ring: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 20%, transparent);
+  --shadow-pop: 0 24px 64px -16px rgb(15 23 42 / .35);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --surface: #151b26;
+  --surface-muted: #0d121b;
+  --surface-sunken: #1c2433;
+  --border: #263042;
+  --text: #e6e9ef;
+  --text-muted: #8b97ab;
+  /* In the dark, tints mix with the background and text shades get lighter. */
+  --color-brand-50: color-mix(in oklab, var(--brand) 16%, #151b26);
+  --color-brand-100: color-mix(in oklab, var(--brand) 26%, #151b26);
+  --color-brand-500: color-mix(in oklab, var(--brand) 85%, white);
+  --color-brand-700: color-mix(in oklab, var(--brand) 55%, white);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 30%, transparent);
+  --shadow-pop: 0 24px 64px -12px rgb(0 0 0 / .6);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--surface-muted);
+  color: var(--text);
+  transition: background-color .2s, color .2s;
+  font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+@layer components {
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.muted { color: var(--text-muted); }
+
+/* Buttons: fixed heights, never wrap or shrink. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .375rem;
+  height: 2rem; padding: 0 .75rem; border-radius: .5rem; flex-shrink: 0; white-space: nowrap;
+  font-size: .8125rem; font-weight: 500; line-height: 1; color: var(--text);
+  border: 1px solid var(--border); background: var(--surface);
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .05s;
+}
+.btn:hover { border-color: color-mix(in srgb, var(--color-brand-500) 55%, var(--border)); background: var(--surface-muted); }
+.btn:active:not(:disabled) { transform: translateY(.5px); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-sm { height: 1.625rem; padding: 0 .5rem; font-size: .75rem; border-radius: .375rem; gap: .25rem; }
+.btn-primary { background: var(--color-brand-600); color: var(--on-brand); border-color: transparent; box-shadow: 0 1px 2px color-mix(in srgb, var(--brand) 30%, transparent); }
+.btn-primary:hover { background: var(--color-brand-700); border-color: transparent; }
+.btn-danger { color: #dc2626; }
+.btn-danger:hover { border-color: #fca5a5; background: color-mix(in srgb, #ef4444 6%, var(--surface)); }
+.btn-danger-solid { background: #dc2626; color: #fff; border-color: transparent; }
+.btn-danger-solid:hover { background: #b91c1c; border-color: transparent; }
+
+/* Inputs: 36px controls with a subtle focus ring. */
+.input {
+  width: 100%; height: 2.25rem; padding: 0 .75rem; border-radius: .5rem;
+  font-size: .875rem; line-height: 1.25rem; color: var(--text);
+  border: 1px solid var(--border); background: var(--surface); outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input::placeholder { color: color-mix(in srgb, var(--text-muted) 75%, transparent); }
+.input:hover:not(:focus) { border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border)); }
+.input:focus { border-color: var(--color-brand-500); box-shadow: var(--ring); }
+textarea.input { height: auto; padding: .5rem .75rem; resize: vertical; }
+select.input { padding-right: 2rem; appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .7rem center; }
+.input-sm { height: 2rem; font-size: .8125rem; padding: 0 .625rem; }
+
+/* Form field: label text above its control. */
+.field { display: flex; flex-direction: column; gap: .375rem; font-size: .8125rem; font-weight: 500; color: var(--text); }
+.field > .input, .field > div { font-weight: 400; }
+.field .btn { height: 2.25rem; }
+fieldset > legend { font-size: .8125rem; font-weight: 500; margin-bottom: .5rem; }
+.hint { font-size: .75rem; font-weight: 400; color: var(--text-muted); }
+/* Semantic status badges with light/dark variants. */
+.badge { display: inline-flex; align-items: center; gap: .25rem; border-radius: .375rem; padding: .125rem .375rem; font-size: .75rem; line-height: 1rem; white-space: nowrap;
+  background: var(--surface-sunken); color: var(--text-muted); }
+.badge-brand { background: var(--color-brand-100); color: var(--color-brand-700); }
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-warning { background: #fef3c7; color: #92400e; }
+.badge-danger { background: #fee2e2; color: #b91c1c; }
+[data-theme="dark"] .badge-success { background: rgb(34 197 94 / .16); color: #86efac; }
+[data-theme="dark"] .badge-warning { background: rgb(245 158 11 / .16); color: #fcd34d; }
+[data-theme="dark"] .badge-danger { background: rgb(239 68 68 / .18); color: #fca5a5; }
+[data-theme="dark"] .text-red-600 { color: #f87171; }
+
+input[type="checkbox"], input[type="radio"] { accent-color: var(--color-brand-600); width: .9rem; height: .9rem; }
+}
+
+/* Column resize handle: a thin hit area on a header cell's left edge. */
+.col-resizer { position: absolute; left: -0.6rem; top: -0.5rem; bottom: -0.5rem; width: .75rem; cursor: col-resize; z-index: 1; touch-action: none; }
+.col-resizer::after { content: ""; position: absolute; left: 50%; top: 25%; bottom: 25%; width: 1px; background: var(--border); transition: background-color .15s, top .15s, bottom .15s; }
+.col-header .col-resizer::after { background: transparent; }
+.col-header:hover .col-resizer::after { background: var(--border); }
+.col-resizer:hover::after, body.col-resizing .col-resizer::after { background: var(--color-brand-500); top: 0; bottom: 0; width: 2px; }
+body.col-resizing { cursor: col-resize; user-select: none; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Target of an error action: highlighted after navigation. */
+.focus-flash { animation: flash 1.6s var(--ease-out-soft); }
+@keyframes flash {
+  0%, 40% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand-500) 45%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity .18s var(--ease-out-soft), transform .18s var(--ease-out-soft); }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(4px); }
+.list-enter-active, .list-leave-active { transition: all .2s var(--ease-out-soft); }
+.list-enter-from, .list-leave-to { opacity: 0; transform: translateX(-6px); }

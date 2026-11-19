@@ -1,0 +1,32 @@
+{
+  "id": "samba-gateway",
+  "name": "Samba 网关",
+  "version": "1.0.0",
+  "type": "backend",
+  "description": "通过 SMB 共享被授权的目录（Windows/macOS 网络磁盘）。账户使用各用户在「我的账号」中生成的应用密码；可选由插件管理 Samba 容器。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.4.0" },
+  "permissions": ["accounts:nt-hash", "docker:socket"],
+  "backend": {
+    "executable": {
+      "linux/amd64": "bin/linux-amd64/samba-gateway",
+      "linux/arm64": "bin/linux-arm64/samba-gateway",
+      "darwin/arm64": "bin/darwin-arm64/samba-gateway",
+      "darwin/amd64": "bin/darwin-amd64/samba-gateway"
+    },
+    "accounts": true
+  },
+  "config": [
+    { "key": "outputDir", "label": "配置输出目录", "type": "string", "default": "samba", "help": "生成 smb.conf、smbpasswd 的目录；相对路径基于插件目录。" },
+    { "key": "containerData", "label": "容器内数据根路径", "type": "string", "default": "/data" },
+    { "key": "forceUid", "label": "文件属主 UID", "type": "number", "default": 1000, "help": "与 EasyCloud 的 PUID 保持一致，SMB 写入的文件属主就与网页上传一致。" },
+    { "key": "forceGid", "label": "文件属组 GID", "type": "number", "default": 1000 },
+    { "key": "workgroup", "label": "工作组", "type": "string", "default": "WORKGROUP" },
+    { "key": "manageContainer", "label": "由插件管理 Samba 容器", "type": "bool", "default": false, "help": "需要挂载 Docker socket。关闭时只生成配置，供你自己的 Samba 使用。" },
+    { "key": "dockerSocket", "label": "Docker socket", "type": "string", "default": "/var/run/docker.sock" },
+    { "key": "image", "label": "Samba 镜像", "type": "string", "default": "ghcr.io/crazy-max/samba:latest" },
+    { "key": "hostDataRoot", "label": "宿主机上的数据目录", "type": "string", "placeholder": "如 /mnt/ssd/nasData（EasyCloud 运行在容器中时必填）" },
+    { "key": "hostConfigDir", "label": "宿主机上的配置输出目录", "type": "string", "placeholder": "EasyCloud 运行在容器中时必填" },
+    { "key": "smbPort", "label": "SMB 端口", "type": "number", "default": 445 }
+  ]
+}

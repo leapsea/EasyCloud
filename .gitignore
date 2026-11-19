@@ -1,0 +1,9 @@
+/easycloud
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+*.db
+*.db-*
+/.dev/
+/dist/
+.gitlab-ci.yml

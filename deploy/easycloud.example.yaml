@@ -1,0 +1,16 @@
+# Lowest-priority file config; EASYCLOUD_* environment variables override it,
+# and runtime settings changed in the Dashboard override both.
+data_root: /data
+paths:
+  app_data: /var/lib/easycloud
+http:
+  listen: ":8080"
+database:
+  driver: sqlite          # mariadb support is planned
+upload:
+  max_file_size: 0        # bytes, 0 = unlimited
+  chunk_size: 16777216    # 16 MB; lower it if your reverse proxy limits body size
+trash:
+  retention_days: 30
+log:
+  level: info

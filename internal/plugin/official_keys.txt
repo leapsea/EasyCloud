@@ -1,0 +1,5 @@
+# Public keys of the official plugin signing key(s), base64, one per line.
+# Packages signed with these install from the plugin market without extra setup;
+# EASYCLOUD_PLUGINS_TRUSTED_KEYS adds more. Keep the old key here for a while
+# after rotating so already-published versions stay installable.
+# Generate: go run ./cmd/ecplugin keygen -out official   (see docs/release.md)

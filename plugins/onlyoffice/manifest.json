@@ -1,0 +1,16 @@
+{
+  "id": "onlyoffice",
+  "name": "OnlyOffice 在线编辑",
+  "version": "1.0.0",
+  "type": "connector",
+  "description": "连接你自己部署的 OnlyOffice Document Server，在线查看和编辑 Word、Excel、PowerPoint、PDF。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.3.0" },
+  "permissions": ["network:document-server"],
+  "connector": { "kind": "onlyoffice" },
+  "config": [
+    { "key": "documentServerUrl", "label": "Document Server 地址", "type": "url", "required": true, "placeholder": "https://office.example.com", "help": "浏览器与 EasyCloud 都要能访问这个地址。" },
+    { "key": "jwtSecret", "label": "JWT 密钥", "type": "secret", "required": true, "help": "与 Document Server 的 JWT_SECRET 保持一致。" },
+    { "key": "publicUrl", "label": "EasyCloud 对 Document Server 可见的地址", "type": "url", "placeholder": "留空则使用浏览器访问地址，例如 http://easycloud:8080", "help": "Document Server 通过它下载文件和回调保存；在同一 Docker 网络中可填服务名。" }
+  ]
+}

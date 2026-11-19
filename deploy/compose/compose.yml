@@ -1,0 +1,42 @@
+# EasyCloud + MariaDB.
+#   1. cp .env.example .env   and set the passwords
+#   2. mkdir -p data config logs && sudo chown 1000:2000 data config logs
+#      (the uid:gid in `user:` below — the owner of every file EasyCloud creates)
+#   3. docker compose up -d   then open http://<host>:2030
+# SQLite instead of MariaDB: use compose.sqlite.yml.
+services:
+  app:
+    container_name: EasyCloud
+    image: ghcr.io/leapsea/easycloud:latest
+    user: 1000:2000
+    restart: unless-stopped
+    ports:
+      - 2030:80
+    volumes:
+      - "./data:/data"     # your files; point it at the NAS directory, e.g. /mnt/ssd/nasData:/data
+      - "./config:/config" # database (SQLite), thumbnails, metrics, plugins
+      - "./logs:/logs"     # optional: rotated easycloud.log files; remove the line to log to stdout only
+    env_file:
+      - .env # database and other settings
+    environment:
+      EASYCLOUD_DB_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy # start once the database accepts connections
+
+  db:
+    container_name: EasyCloud-DB
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${EASYCLOUD_DB_NAME:-easycloud}
+      MARIADB_USER: ${EASYCLOUD_DB_USER:-easycloud}
+      MARIADB_PASSWORD: ${EASYCLOUD_DB_PASSWORD:?set EASYCLOUD_DB_PASSWORD in .env}
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - "./mariadb:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
