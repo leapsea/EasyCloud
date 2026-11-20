@@ -84,6 +84,12 @@ const pwOpen = ref(false), pwValue = ref('')
 async function resetPw() {
   try { await adminApi.resetPassword(editing.value!.id, pwValue.value); toast.success(t('users.pwReset')); pwOpen.value = false } catch (e) { toast.error(e) }
 }
+// Removes the user's authenticator (lost phone); they can bind a new one.
+async function resetTwoFactor() {
+  const u = editing.value!
+  if (!confirm(t('users.resetTwoFactorConfirm', { name: u.username }))) return
+  try { await adminApi.resetTwoFactor(u.id); toast.success(t('users.twoFactorReset')); u.twoFactor = false; load() } catch (e) { toast.error(e) }
+}
 const delOpen = ref(false)
 async function del() {
   try { await adminApi.deleteUser(editing.value!.id); toast.success(t('users.deleted')); delOpen.value = false; editOpen.value = false; load() } catch (e) { toast.error(e) }
@@ -115,7 +121,7 @@ function genPassword() {
               <p class="font-medium">{{ u.displayName }} <span v-if="u.id === auth.user?.id" class="muted text-xs">{{ $t('users.you') }}</span></p>
               <p class="muted text-xs">{{ u.username }}{{ u.disabled ? ' · ' + $t('users.disabled') : '' }}</p>
             </td>
-            <td class="px-2"><span class="badge" :class="u.role === 'admin' ? 'badge-brand' : ''">{{ u.role === 'admin' ? $t('users.role.admin') : $t('users.role.user') }}</span></td>
+            <td class="px-2"><span class="badge" :class="u.role === 'admin' ? 'badge-brand' : ''">{{ u.role === 'admin' ? $t('users.role.admin') : $t('users.role.user') }}</span><span v-if="u.twoFactor" class="badge badge-success ml-1" :title="$t('users.twoFactorOn')">2FA</span></td>
             <td class="px-2 text-xs">{{ u.groupIds.map(groupName).join('、') || '—' }}</td>
             <td class="px-2 text-xs tabular-nums">
               {{ usage[u.id] !== undefined ? formatSize(usage[u.id]) : '…' }}
@@ -169,6 +175,7 @@ function genPassword() {
       </form>
       <template #footer>
         <button class="btn btn-danger mr-auto" :disabled="editing?.id === auth.user?.id" @click="delOpen = true">{{ $t('users.delete') }}</button>
+        <button v-if="editing?.twoFactor" class="btn" :title="$t('users.resetTwoFactorHint')" @click="resetTwoFactor">{{ $t('users.resetTwoFactor') }}</button>
         <button class="btn" @click="pwValue = genPassword(); pwOpen = true">{{ $t('users.resetPw') }}</button>
         <button class="btn" @click="editOpen = false">{{ $t('common.cancel') }}</button>
         <button class="btn btn-primary" @click="saveEdit">{{ $t('common.save') }}</button>

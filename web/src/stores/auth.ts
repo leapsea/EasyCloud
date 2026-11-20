@@ -10,7 +10,7 @@ export const useAuth = defineStore('auth', () => {
     try { user.value = await authApi.me() } catch { user.value = null }
     checked.value = true
   }
-  async function login(username: string, password: string) { user.value = await authApi.login(username, password) }
+  async function login(username: string, cred: { password?: string; code?: string }) { user.value = await authApi.login(username, cred) }
   async function logout() { await authApi.logout().catch(() => {}); user.value = null }
 
   return { user, checked, check, login, logout }

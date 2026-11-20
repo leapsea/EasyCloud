@@ -27,6 +27,8 @@ export const filesApi = {
   usage: (path: string) => request<{ bytes: number; files: number }>('GET', `/api/files/usage?${qs({ path })}`),
   // Player: whether a video is streamed with a playback fix (see internal/media/mp4fix).
   playback: (path: string) => request<{ fixed: boolean; reasons: string[] }>('GET', `/api/files/playback?${qs({ path })}`),
+  category: (kind: string, o: { sort?: string; order?: string; offset?: number; limit?: number }) =>
+    request<{ items: FileEntry[]; total: number }>('GET', `/api/files/category?${qs({ kind, sort: o.sort ?? 'mtime', order: o.order ?? 'desc', offset: String(o.offset ?? 0), limit: String(o.limit ?? 100) })}`),
   details: (path: string) => request<FileDetails>('GET', `/api/files/details?${qs({ path })}`),
   streamUrl: (path: string) => `/api/files/stream?${qs({ path })}`,
   downloadUrl: (path: string, inline = false) =>
@@ -49,10 +51,14 @@ export const settingsApi = {
   clientConfig: () => request<{ uploadChunkSize: number; uploadMaxFileSize: number }>('GET', '/api/client-config'),
 }
 
-export interface Me { id: string; username: string; displayName: string; isAdmin: boolean; home: string; quotaBytes: number }
+export interface Me { id: string; username: string; displayName: string; isAdmin: boolean; home: string; quotaBytes: number; twoFactor?: boolean }
 export const authApi = {
   me: () => request<Me>('GET', '/api/auth/me'),
-  login: (username: string, password: string) => request<Me>('POST', '/api/auth/login', { username, password }),
+  // Either the password or, once an authenticator is bound, a current code.
+  login: (username: string, cred: { password?: string; code?: string }) => request<Me>('POST', '/api/auth/login', { username, ...cred }),
+  totpSetup: (password: string) => request<{ secret: string; uri: string }>('POST', '/api/auth/2fa/setup', { password }),
+  totpEnable: (code: string) => request<void>('POST', '/api/auth/2fa/enable', { code }),
+  totpDisable: (cred: { password?: string; code?: string }) => request<void>('POST', '/api/auth/2fa/disable', cred),
   logout: () => request<void>('POST', '/api/auth/logout'),
   changePassword: (current: string, next: string) => request<void>('POST', '/api/auth/password', { current, next }),
 }

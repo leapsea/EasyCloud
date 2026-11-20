@@ -18,6 +18,23 @@ export default {
     "quota": "配额 {size}",
     "saved": "我已保存",
     "smbNeedsPlugin": "需管理员启用 Samba 网关插件",
+    "tfBind": "绑定身份验证器",
+    "tfConfirm": "完成绑定",
+    "tfDisabled": "已解除两步验证",
+    "tfEnabled": "已绑定两步验证",
+    "tfHelp": "绑定身份验证器 App（如 Google Authenticator、Microsoft Authenticator、1Password）后，登录时可使用密码或 App 中的 6 位动态码。",
+    "tfManual": "无法扫码？手动输入密钥：",
+    "tfNext": "下一步",
+    "tfOff": "未绑定",
+    "tfOn": "已绑定",
+    "tfOnHelp": "已绑定身份验证器：登录时可使用密码或动态码。更换手机前请先解除绑定。",
+    "tfOrCode": "或输入 6 位动态码",
+    "tfQrAlt": "绑定二维码",
+    "tfStep1": "为确认是本人操作，请输入当前密码。",
+    "tfStep2": "用身份验证器 App 扫描二维码，然后输入 App 显示的 6 位动态码完成绑定。",
+    "tfTitle": "两步验证",
+    "tfUnbind": "解除绑定",
+    "tfUnbindHelp": "输入当前密码，或输入一个动态码。",
     "unused": "未使用",
     "used": "已用 {size}（{n} 个文件）"
   },
@@ -112,6 +129,25 @@ export default {
     "none": "没有记录",
     "pathPrefix": "路径前缀，如 /share",
     "query": "查询"
+  },
+  "category": {
+    "count": "共 {n} 个",
+    "empty": {
+      "audio": "没有找到音频",
+      "doc": "没有找到文档",
+      "image": "没有找到图片",
+      "video": "没有找到视频"
+    },
+    "indexHint": "分类来自文件索引，刚添加的文件可能需要片刻才会出现。",
+    "sort": {
+      "largest": "最大",
+      "nameAsc": "名称 A→Z",
+      "nameDesc": "名称 Z→A",
+      "newest": "最近修改",
+      "oldest": "最早修改",
+      "smallest": "最小"
+    },
+    "sortLabel": "排序"
   },
   "common": {
     "back": "返回",
@@ -217,6 +253,10 @@ export default {
     "TASK_QUEUE_FULL": "任务队列已满，请稍后再试",
     "THUMBNAIL_UNSUPPORTED": "无法为该文件生成缩略图",
     "TOO_MANY_ATTEMPTS": "尝试次数过多，请稍后再试",
+    "TOTP_ALREADY_ENABLED": "已绑定两步验证",
+    "TOTP_BAD_CODE": "动态码错误或已使用",
+    "TOTP_NOT_ENABLED": "未绑定两步验证",
+    "TOTP_NO_SETUP": "绑定已失效，请重新开始",
     "UNAUTHORIZED": "登录已失效，请重新登录",
     "UPLOAD_TOO_LARGE": "文件超过上传大小限制"
   },
@@ -326,6 +366,10 @@ export default {
     "preview": "预览图"
   },
   "login": {
+    "byCode": "动态码",
+    "byPassword": "密码",
+    "codeHint": "输入身份验证器 App 中的动态码（需已绑定）",
+    "codePlaceholder": "6 位动态码",
     "hint": "首次启动时，管理员（admin）的初始密码会打印在服务日志中。",
     "password": "密码",
     "signIn": "登录",
@@ -337,6 +381,13 @@ export default {
     "admin": "管理",
     "allShares": "全部分享",
     "audit": "审计日志",
+    "cat": {
+      "audio": "音频",
+      "doc": "文档",
+      "image": "图片",
+      "video": "视频"
+    },
+    "categories": "分类",
     "collapse": "收起菜单",
     "dashboard": "仪表盘",
     "expand": "展开菜单",
@@ -630,11 +681,16 @@ export default {
     "reset": "重置",
     "resetPw": "重置密码",
     "resetPwDesc": "新密码立即生效，该用户的所有会话将被注销。",
+    "resetTwoFactor": "重置 2FA",
+    "resetTwoFactorConfirm": "确定重置用户 {name} 的两步验证？其身份验证器将失效，可重新绑定。",
+    "resetTwoFactorHint": "用户手机丢失时，移除其身份验证器",
     "role": {
       "admin": "管理员",
       "user": "用户"
     },
     "search": "搜索用户",
+    "twoFactorOn": "2FA",
+    "twoFactorReset": "已重置两步验证",
     "usernameHint": "小写字母、数字、._-",
     "usernameRule": "用户名需以小写字母或数字开头，只能包含小写字母、数字、“.”“_”“-”，最长 32 位",
     "you": "（你）"

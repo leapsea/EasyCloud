@@ -5,9 +5,11 @@ import { useLocalePref } from '@/i18n'
 import { Check, Monitor, Moon, Sun } from 'lucide-vue-next'
 import { ACCENTS, useTheme } from '@/theme/theme'
 import { GALLERY_COL_CHOICES, galleryCols } from '@/features/files/galleryPref'
-import { KeyRound } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck } from 'lucide-vue-next'
+import QRCode from 'qrcode'
 import { computed, onMounted, ref } from 'vue'
 import { authApi, filesApi } from '@/api/files'
+import { errorMessage } from '@/api/client'
 import { appPasswordApi, type AppPassword } from '@/api/share'
 import Modal from '@/components/Modal.vue'
 import { formatTime } from '@/components/format'
@@ -57,6 +59,36 @@ onMounted(async () => {
   if (auth.user) usage.value = await filesApi.usage(auth.user.home).catch(() => null)
   loadAppPasswords()
 })
+// Two-step verification (authenticator app). Binding: password, then scan the
+// QR code and confirm with a code. Once bound, the account signs in with the
+// password or a current code. Unbinding: password or a code.
+const tf = ref({ open: false, step: 'password' as 'password' | 'scan' | 'disable', password: '', code: '', secret: '', qr: '', busy: false, error: '' })
+function startBind() { tf.value = { ...tf.value, open: true, step: 'password', password: '', code: '', secret: '', qr: '', error: '' } }
+function startUnbind() { tf.value = { ...tf.value, open: true, step: 'disable', password: '', code: '', error: '' } }
+async function tfNext() {
+  const s = tf.value
+  s.busy = true; s.error = ''
+  try {
+    if (s.step === 'password') {
+      const r = await authApi.totpSetup(s.password)
+      s.secret = r.secret
+      s.qr = await QRCode.toDataURL(r.uri, { margin: 1, width: 200 })
+      s.step = 'scan'; s.password = ''
+    } else if (s.step === 'scan') {
+      await authApi.totpEnable(s.code.replace(/\s/g, ''))
+      s.open = false
+      toast.success(t('account.tfEnabled'))
+      await auth.check()
+    } else {
+      await authApi.totpDisable(s.password ? { password: s.password } : { code: s.code.replace(/\s/g, '') })
+      s.open = false
+      toast.success(t('account.tfDisabled'))
+      await auth.check()
+    }
+  } catch (e) { s.error = errorMessage(e) } finally { s.busy = false }
+}
+const secretGroups = computed(() => tf.value.secret.replace(/(.{4})/g, '$1 ').trim())
+
 async function change() {
   if (pw.value.next !== pw.value.confirm) { toast.push({ kind: 'error', text: t('account.pwMismatch') }); return }
   busy.value = true
@@ -175,6 +207,51 @@ async function change() {
       <div class="flex gap-2"><code class="input flex-1 select-all font-mono">{{ created?.password }}</code><button class="btn" @click="created && copyText(created.password)">{{ $t('common.copy') }}</button></div>
       <template #footer><button class="btn btn-primary" @click="created = null">{{ $t('account.saved') }}</button></template>
     </Modal>
+    <div class="card grid gap-3 p-4 text-sm">
+      <div class="flex items-center gap-2">
+        <h2 class="font-medium">{{ $t('account.tfTitle') }}</h2>
+        <span v-if="auth.user?.twoFactor" class="badge badge-success"><ShieldCheck class="h-3 w-3" />{{ $t('account.tfOn') }}</span>
+        <span v-else class="badge">{{ $t('account.tfOff') }}</span>
+      </div>
+      <p class="muted text-xs leading-5">{{ auth.user?.twoFactor ? $t('account.tfOnHelp') : $t('account.tfHelp') }}</p>
+      <div>
+        <button v-if="auth.user?.twoFactor" class="btn btn-danger" @click="startUnbind">{{ $t('account.tfUnbind') }}</button>
+        <button v-else class="btn btn-primary" @click="startBind">{{ $t('account.tfBind') }}</button>
+      </div>
+    </div>
+    <Modal v-model:open="tf.open" :title="tf.step === 'disable' ? $t('account.tfUnbind') : $t('account.tfBind')">
+      <form class="grid gap-3 text-sm" @submit.prevent="tfNext">
+        <template v-if="tf.step === 'password'">
+          <p class="muted text-xs">{{ $t('account.tfStep1') }}</p>
+          <input v-model="tf.password" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" autofocus />
+        </template>
+        <template v-else-if="tf.step === 'scan'">
+          <p class="muted text-xs leading-5">{{ $t('account.tfStep2') }}</p>
+          <img :src="tf.qr" :alt="$t('account.tfQrAlt')" class="mx-auto h-48 w-48 rounded-lg border border-[var(--border)] bg-white p-1" />
+          <div class="text-center">
+            <p class="muted text-xs">{{ $t('account.tfManual') }}</p>
+            <code class="mt-1 inline-block select-all break-all rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-xs">{{ secretGroups }}</code>
+            <button type="button" class="ml-2 text-xs text-brand-600 hover:underline" @click="copyText(tf.secret)">{{ $t('common.copy') }}</button>
+          </div>
+          <input v-model="tf.code" class="input text-center font-mono tracking-[0.3em]" :placeholder="$t('login.codePlaceholder')" inputmode="numeric" autocomplete="one-time-code" maxlength="7" autofocus />
+        </template>
+        <template v-else>
+          <p class="muted text-xs">{{ $t('account.tfUnbindHelp') }}</p>
+          <input v-model="tf.password" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" />
+          <input v-model="tf.code" class="input font-mono tracking-[0.3em]" :placeholder="$t('account.tfOrCode')" inputmode="numeric" autocomplete="one-time-code" maxlength="7" />
+        </template>
+        <p v-if="tf.error" class="text-xs text-red-600" role="alert">{{ tf.error }}</p>
+      </form>
+      <template #footer>
+        <button class="btn" @click="tf.open = false">{{ $t('common.cancel') }}</button>
+        <button
+          class="btn" :class="tf.step === 'disable' ? 'btn-danger-solid' : 'btn-primary'"
+          :disabled="tf.busy || (tf.step === 'password' && !tf.password) || (tf.step === 'scan' && tf.code.replace(/\s/g, '').length !== 6) || (tf.step === 'disable' && !tf.password && tf.code.replace(/\s/g, '').length !== 6)"
+          @click="tfNext"
+        >{{ tf.step === 'password' ? $t('account.tfNext') : tf.step === 'scan' ? $t('account.tfConfirm') : $t('account.tfUnbind') }}</button>
+      </template>
+    </Modal>
+
     <form class="card grid gap-3 p-4" @submit.prevent="change">
       <h2 class="font-medium">{{ $t('account.changePw') }}</h2>
       <input v-model="pw.current" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" />

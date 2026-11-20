@@ -3,6 +3,7 @@ package index
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/easycloud/easycloud/internal/pathguard"
@@ -77,6 +78,52 @@ func Mount(r chi.Router, store *Store, guard pathguard.Authorizer, log *slog.Log
 		httpx.WriteJSON(w, http.StatusOK, map[string]int64{"bytes": b, "files": n})
 		return nil
 	}).With(log))
+}
+
+// MountCategories registers GET /files/category?kind=image|video|audio|doc
+// [&sort=mtime|name|size&order=asc|desc&offset=&limit=]: the files of a kind
+// across everything the user may read. thumbable tells whether the thumbnail
+// service can render a file.
+func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thumbable func(name string) bool, log *slog.Logger) {
+	r.Get("/files/category", httpx.Handler(func(w http.ResponseWriter, req *http.Request) error {
+		q := req.URL.Query()
+		cat, ok := Categories[q.Get("kind")]
+		if !ok {
+			return errs.ErrInvalidInput.WithDetail("kind must be image, video, audio or doc")
+		}
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		if offset < 0 {
+			offset = 0
+		}
+		if limit <= 0 || limit > 200 {
+			limit = 100
+		}
+		roots, err := guard.Roots(req.Context(), httpx.Subject(req))
+		if err != nil {
+			return err
+		}
+		scope := make([]string, len(roots))
+		for i, r := range roots {
+			scope[i] = r.String()
+		}
+		nodes, total, err := store.ByCategory(req.Context(), cat, scope, q.Get("sort"), q.Get("order") == "asc", offset, limit)
+		if err != nil {
+			return err
+		}
+		items := make([]categoryItem, 0, len(nodes))
+		for _, n := range nodes {
+			items = append(items, categoryItem{searchHit{Name: n.Name, Path: "/" + n.Path, Size: n.Size,
+				ModTime: n.MTime.Format("2006-01-02T15:04:05Z07:00"), Mime: n.Mime, Width: n.Width, Height: n.Height}, thumbable != nil && thumbable(n.Name)})
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+		return nil
+	}).With(log))
+}
+
+type categoryItem struct {
+	searchHit
+	Thumb bool `json:"thumb,omitempty"`
 }
 
 // scopeRoots intersects the subtree p with the readable roots.

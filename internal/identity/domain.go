@@ -43,6 +43,7 @@ type User struct {
 	QuotaBytes  int64     `json:"quotaBytes"`
 	CreatedAt   time.Time `json:"createdAt"`
 	GroupIDs    []string  `json:"groupIds"`
+	TwoFactor   bool      `json:"twoFactor"` // filled in for the admin user list
 	hash        string
 }
 

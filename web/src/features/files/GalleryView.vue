@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { galleryCols } from './galleryPref'
 import FileIcon from '@/components/FileIcon.vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { FileEntry } from '@/api/files'
 import { formatSize } from '@/components/format'
 
 // Virtualized waterfall: columns are assigned greedily (shortest first) using
 // the image dimensions from the index, so tiles never jump while loading.
 const props = defineProps<{ entries: FileEntry[]; selected: Set<string> }>()
-const emit = defineEmits<{ open: [e: FileEntry]; select: [e: FileEntry, ev: MouseEvent] }>()
+// 'more' fires when the end of the list is near (for incrementally loaded lists).
+const emit = defineEmits<{ open: [e: FileEntry]; select: [e: FileEntry, ev: MouseEvent]; more: [] }>()
 
 const scroller = ref<HTMLElement>()
 const width = ref(800)
@@ -39,6 +40,9 @@ const layout = computed(() => {
   })
 })
 const total = computed(() => Math.max(0, ...layout.value.map((l) => l.top + l.h + CAPTION)))
+watch([scrollTop, viewport, () => total.value], () => {
+  if (scrollTop.value + viewport.value >= total.value - 800) emit('more')
+})
 const visible = computed(() => {
   const lo = scrollTop.value - 600, hi = scrollTop.value + viewport.value + 600
   return layout.value.filter((l) => l.top + l.h + CAPTION >= lo && l.top <= hi)

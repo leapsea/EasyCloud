@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -88,6 +89,51 @@ func (h *HTTP) Mount(r chi.Router) {
 		httpx.WriteJSON(w, http.StatusCreated, map[string]any{"item": ap, "password": pw})
 		return nil
 	}))
+	// Authenticator app (TOTP): setup returns a pending secret, enable confirms
+	// it with a code, disable needs the password or a code.
+	r.Post("/auth/2fa/setup", h.h(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Password string `json:"password"`
+		}
+		if err := httpx.DecodeJSON(r, &in); err != nil {
+			return err
+		}
+		secret, uri, err := h.svc.SetupTOTP(r.Context(), httpx.Subject(r).UserID, in.Password)
+		if err != nil {
+			return err
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"secret": secret, "uri": uri})
+		return nil
+	}))
+	r.Post("/auth/2fa/enable", h.h(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Code string `json:"code"`
+		}
+		if err := httpx.DecodeJSON(r, &in); err != nil {
+			return err
+		}
+		if err := h.svc.EnableTOTP(r.Context(), httpx.Subject(r).UserID, in.Code); err != nil {
+			return err
+		}
+		h.record(r, "2fa.enable", "", "")
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
+	r.Post("/auth/2fa/disable", h.h(func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Password string `json:"password"`
+			Code     string `json:"code"`
+		}
+		if err := httpx.DecodeJSON(r, &in); err != nil {
+			return err
+		}
+		if err := h.svc.DisableTOTP(r.Context(), httpx.Subject(r).UserID, in.Password, in.Code); err != nil {
+			return err
+		}
+		h.record(r, "2fa.disable", "", "")
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
 	r.Delete("/auth/app-passwords/{id}", h.h(func(w http.ResponseWriter, r *http.Request) error {
 		if err := h.svc.DeleteAppPassword(r.Context(), httpx.Subject(r).UserID, chi.URLParam(r, "id")); err != nil {
 			return err
@@ -105,6 +151,18 @@ func (h *HTTP) MountAdmin(r chi.Router) {
 	r.Patch("/users/{id}", h.h(h.updateUser))
 	r.Delete("/users/{id}", h.h(h.deleteUser))
 	r.Post("/users/{id}/password", h.h(h.resetPassword))
+	r.Post("/users/{id}/2fa/reset", h.h(func(w http.ResponseWriter, r *http.Request) error {
+		id := chi.URLParam(r, "id")
+		if _, err := h.svc.GetUser(r.Context(), id); err != nil {
+			return err
+		}
+		if err := h.svc.ResetTOTP(r.Context(), id); err != nil {
+			return err
+		}
+		h.record(r, "2fa.reset", "", id)
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
 	r.Get("/groups", h.h(h.listGroups))
 	r.Post("/groups", h.h(h.createGroup))
 	r.Patch("/groups/{id}", h.h(h.updateGroup))
@@ -138,16 +196,24 @@ type meResp struct {
 	IsAdmin     bool   `json:"isAdmin"`
 	Home        string `json:"home"`
 	QuotaBytes  int64  `json:"quotaBytes"`
+	TwoFactor   bool   `json:"twoFactor"` // an authenticator app is bound
 }
 
 func me(u User) meResp {
 	return meResp{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, IsAdmin: u.Role == RoleAdmin, Home: "/" + u.Home(), QuotaBytes: u.QuotaBytes}
 }
 
+func (h *HTTP) meOf(ctx context.Context, u User) meResp {
+	m := me(u)
+	m.TwoFactor = h.svc.TOTPEnabled(ctx, u.ID)
+	return m
+}
+
 func (h *HTTP) login(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Code     string `json:"code"` // authenticator code instead of the password
 	}
 	if err := httpx.DecodeJSON(r, &in); err != nil {
 		return err
@@ -155,10 +221,21 @@ func (h *HTTP) login(w http.ResponseWriter, r *http.Request) error {
 	if in.Username == "" {
 		in.Username = "admin" // V1 clients sent only a password
 	}
-	u, tok, err := h.svc.Login(r.Context(), httpx.ClientIP(r), in.Username, in.Password)
+	var (
+		u   User
+		tok string
+		err error
+	)
+	method := "password"
+	if in.Password == "" && in.Code != "" {
+		method = "totp"
+		u, tok, err = h.svc.LoginWithCode(r.Context(), httpx.ClientIP(r), in.Username, in.Code)
+	} else {
+		u, tok, err = h.svc.Login(r.Context(), httpx.ClientIP(r), in.Username, in.Password)
+	}
 	if err != nil {
 		if errors.Is(err, ErrBadCredentials) {
-			h.audit.Record(audit.Entry{Username: strings.ToLower(in.Username), Action: "login.failed", IP: httpx.ClientIP(r)})
+			h.audit.Record(audit.Entry{Username: strings.ToLower(in.Username), Action: "login.failed", Detail: method, IP: httpx.ClientIP(r)})
 		}
 		return err
 	}
@@ -166,8 +243,8 @@ func (h *HTTP) login(w http.ResponseWriter, r *http.Request) error {
 		Name: CookieName, Value: tok, Path: "/", HttpOnly: true, Secure: httpx.IsHTTPS(r),
 		SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(SessionTTL),
 	})
-	h.audit.Record(audit.Entry{UserID: u.ID, Username: u.Username, Action: "login", IP: httpx.ClientIP(r)})
-	httpx.WriteJSON(w, http.StatusOK, me(u))
+	h.audit.Record(audit.Entry{UserID: u.ID, Username: u.Username, Action: "login", Detail: method, IP: httpx.ClientIP(r)})
+	httpx.WriteJSON(w, http.StatusOK, h.meOf(r.Context(), u))
 	return nil
 }
 
@@ -187,7 +264,7 @@ func (h *HTTP) me(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, me(u))
+	httpx.WriteJSON(w, http.StatusOK, h.meOf(r.Context(), u))
 	return nil
 }
 
@@ -218,6 +295,11 @@ func (h *HTTP) listUsers(w http.ResponseWriter, r *http.Request) error {
 	us, err := h.svc.ListUsers(r.Context())
 	if err != nil {
 		return err
+	}
+	if bound, err := h.svc.TOTPUsers(r.Context()); err == nil {
+		for i := range us {
+			us[i].TwoFactor = bound[us[i].ID]
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": us})
 	return nil

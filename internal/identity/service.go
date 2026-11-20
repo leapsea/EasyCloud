@@ -305,6 +305,7 @@ func (s *Service) DeleteUser(ctx context.Context, actor, id string) error {
 			"DELETE FROM easycloud_group_members WHERE user_id = ?",
 			"DELETE FROM easycloud_grants WHERE subject_type = 'user' AND subject_id = ?",
 			"DELETE FROM easycloud_sessions WHERE user_id = ?",
+			"DELETE FROM easycloud_totp WHERE user_id = ?",
 		} {
 			if _, err := tx.ExecContext(ctx, q, id); err != nil {
 				return err
@@ -371,10 +372,15 @@ func (s *Service) Login(ctx context.Context, clientIP, username, password string
 		s.limiter.record(clientIP, key)
 		return User{}, "", ErrBadCredentials
 	}
-	tok := randomToken(32)
-	_, err = s.db.W.ExecContext(ctx, "INSERT INTO easycloud_sessions (token_hash, expires_at, user_id) VALUES (?, ?, ?)",
-		hashToken(tok), time.Now().Add(SessionTTL).Unix(), u.ID)
+	tok, err := s.newSession(ctx, u.ID)
 	return u, tok, err
+}
+
+func (s *Service) newSession(ctx context.Context, userID string) (string, error) {
+	tok := randomToken(32)
+	_, err := s.db.W.ExecContext(ctx, "INSERT INTO easycloud_sessions (token_hash, expires_at, user_id) VALUES (?, ?, ?)",
+		hashToken(tok), time.Now().Add(SessionTTL).Unix(), userID)
+	return tok, err
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {

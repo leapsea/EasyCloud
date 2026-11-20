@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ThemeToggle from '@/components/ThemeToggle.vue'
-import { Building2, HardDrive, LogOut, PanelLeftClose, PanelLeftOpen, CircleUserRound, Cloud, FolderOpen, Globe, LayoutDashboard, Puzzle, ScrollText, Settings, Share2, ShieldCheck, Trash2, Users } from 'lucide-vue-next'
+import { Building2, FileText, Film, Image as ImageIcon, Music, HardDrive, LogOut, PanelLeftClose, PanelLeftOpen, CircleUserRound, Cloud, FolderOpen, Globe, LayoutDashboard, Puzzle, ScrollText, Settings, Share2, ShieldCheck, Trash2, Users } from 'lucide-vue-next'
 import { computed, provide, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
@@ -36,6 +36,13 @@ const nav = [
   { to: '/trash', label: 'nav.trash', icon: Trash2 },
   { to: '/account', label: 'nav.account', icon: CircleUserRound },
 ]
+// Files of a kind across everything the user may read.
+const categoryNav = [
+  { to: '/category/image', label: 'nav.cat.image', icon: ImageIcon },
+  { to: '/category/video', label: 'nav.cat.video', icon: Film },
+  { to: '/category/audio', label: 'nav.cat.audio', icon: Music },
+  { to: '/category/doc', label: 'nav.cat.doc', icon: FileText },
+]
 const adminNav = [
   { to: '/admin/dashboard', label: 'nav.dashboard', icon: LayoutDashboard },
   { to: '/admin/users', label: 'nav.users', icon: Users },
@@ -69,18 +76,25 @@ const adminNav = [
         <PanelLeftOpen class="hidden h-4 w-4 text-[var(--text-muted)] group-hover:block" />
       </button>
 
-      <nav class="no-scrollbar mt-4 flex flex-col gap-1 overflow-y-auto overflow-x-hidden">
+      <nav class="no-scrollbar mt-4 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
         <RouterLink
           v-for="n in nav" :key="n.to" :to="n.to" :title="isCollapsed ? $t(n.label) : undefined"
-          class="flex h-9 items-center gap-2 rounded-lg text-sm hover:bg-[var(--surface-muted)]" :class="isCollapsed ? 'justify-center' : 'px-3'"
+          class="flex h-8 shrink-0 items-center gap-2.5 rounded-lg text-sm hover:bg-[var(--surface-muted)]" :class="isCollapsed ? 'justify-center' : 'px-3'"
+          active-class="!bg-brand-50 text-brand-700"
+        ><component :is="n.icon" class="h-4 w-4 shrink-0 opacity-80" :stroke-width="1.75" aria-hidden="true" /><span :class="isCollapsed ? 'sr-only' : 'truncate'">{{ $t(n.label) }}</span></RouterLink>
+        <p v-if="!isCollapsed" class="muted mb-1 mt-4 px-3 text-xs">{{ $t('nav.categories') }}</p>
+        <hr v-else class="mx-2 my-2 border-[var(--border)]" />
+        <RouterLink
+          v-for="n in categoryNav" :key="n.to" :to="n.to" :title="isCollapsed ? $t(n.label) : undefined"
+          class="flex h-8 shrink-0 items-center gap-2.5 rounded-lg text-sm hover:bg-[var(--surface-muted)]" :class="isCollapsed ? 'justify-center' : 'px-3'"
           active-class="!bg-brand-50 text-brand-700"
         ><component :is="n.icon" class="h-4 w-4 shrink-0 opacity-80" :stroke-width="1.75" aria-hidden="true" /><span :class="isCollapsed ? 'sr-only' : 'truncate'">{{ $t(n.label) }}</span></RouterLink>
         <template v-if="auth.user?.isAdmin">
-          <p v-if="!isCollapsed" class="muted mt-4 px-3 text-xs">{{ $t('nav.admin') }}</p>
+          <p v-if="!isCollapsed" class="muted mb-1 mt-4 px-3 text-xs">{{ $t('nav.admin') }}</p>
           <hr v-else class="mx-2 my-2 border-[var(--border)]" />
           <RouterLink
             v-for="n in adminNav" :key="n.to" :to="n.to" :title="isCollapsed ? $t(n.label) : undefined"
-            class="flex h-9 items-center gap-2 rounded-lg text-sm hover:bg-[var(--surface-muted)]" :class="isCollapsed ? 'justify-center' : 'px-3'"
+            class="flex h-8 shrink-0 items-center gap-2.5 rounded-lg text-sm hover:bg-[var(--surface-muted)]" :class="isCollapsed ? 'justify-center' : 'px-3'"
             active-class="!bg-brand-50 text-brand-700"
           ><component :is="n.icon" class="h-4 w-4 shrink-0 opacity-80" :stroke-width="1.75" aria-hidden="true" /><span :class="isCollapsed ? 'sr-only' : 'truncate'">{{ $t(n.label) }}</span></RouterLink>
         </template>

@@ -259,6 +259,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 			playback.Mount(p, player, log)
 			info.Mount(p, info.New(files, log), log)
 			index.Mount(p, idxStore, guard, log)
+			index.MountCategories(p, idxStore, guard, thumbs.Supported, log)
 			thumb.Mount(p, thumbs, log)
 			mountTokens(p, signer, files, log)
 			plugin.Mount(p, plugins, log)

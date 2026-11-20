@@ -18,6 +18,23 @@ export default {
     "quota": "quota {size}",
     "saved": "I have saved it",
     "smbNeedsPlugin": "Requires the Samba gateway plugin (ask an administrator)",
+    "tfBind": "Bind authenticator",
+    "tfConfirm": "Finish",
+    "tfDisabled": "Two-step verification is off",
+    "tfEnabled": "Two-step verification is on",
+    "tfHelp": "Bind an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…) to sign in with either your password or a 6-digit code from the app.",
+    "tfManual": "Can't scan? Enter this key manually:",
+    "tfNext": "Next",
+    "tfOff": "Off",
+    "tfOn": "On",
+    "tfOnHelp": "An authenticator is bound: sign in with your password or a code. Unbind before switching phones.",
+    "tfOrCode": "or a 6-digit code",
+    "tfQrAlt": "Binding QR code",
+    "tfStep1": "Enter your current password to confirm it is you.",
+    "tfStep2": "Scan the QR code with your authenticator app, then enter the 6-digit code it shows.",
+    "tfTitle": "Two-step verification",
+    "tfUnbind": "Unbind",
+    "tfUnbindHelp": "Enter your current password, or a current code.",
     "unused": "Never used",
     "used": "{size} used ({n} files)"
   },
@@ -112,6 +129,25 @@ export default {
     "none": "No entries",
     "pathPrefix": "Path prefix, e.g. /share",
     "query": "Search"
+  },
+  "category": {
+    "count": "{n} files",
+    "empty": {
+      "audio": "No audio found",
+      "doc": "No documents found",
+      "image": "No pictures found",
+      "video": "No videos found"
+    },
+    "indexHint": "Categories come from the file index; newly added files may take a moment to appear.",
+    "sort": {
+      "largest": "Largest",
+      "nameAsc": "Name A→Z",
+      "nameDesc": "Name Z→A",
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "smallest": "Smallest"
+    },
+    "sortLabel": "Sort"
   },
   "common": {
     "back": "Back",
@@ -217,6 +253,10 @@ export default {
     "TASK_QUEUE_FULL": "The task queue is full. Please try again later.",
     "THUMBNAIL_UNSUPPORTED": "No thumbnail is available for this file",
     "TOO_MANY_ATTEMPTS": "Too many attempts. Please try again later.",
+    "TOTP_ALREADY_ENABLED": "Two-step verification is already on",
+    "TOTP_BAD_CODE": "Wrong or already used code",
+    "TOTP_NOT_ENABLED": "Two-step verification is not on",
+    "TOTP_NO_SETUP": "Binding expired, start again",
     "UNAUTHORIZED": "Your session has expired. Please sign in again.",
     "UPLOAD_TOO_LARGE": "The file exceeds the upload size limit"
   },
@@ -326,6 +366,10 @@ export default {
     "preview": "Preview"
   },
   "login": {
+    "byCode": "Code",
+    "byPassword": "Password",
+    "codeHint": "Enter the code from your authenticator app (must be bound first)",
+    "codePlaceholder": "6-digit code",
     "hint": "On first start, the initial password of the \"admin\" account is printed in the server log.",
     "password": "Password",
     "signIn": "Sign in",
@@ -337,6 +381,13 @@ export default {
     "admin": "Administration",
     "allShares": "All shares",
     "audit": "Audit log",
+    "cat": {
+      "audio": "Audio",
+      "doc": "Documents",
+      "image": "Pictures",
+      "video": "Videos"
+    },
+    "categories": "Categories",
     "collapse": "Collapse sidebar",
     "dashboard": "Dashboard",
     "expand": "Expand sidebar",
@@ -630,11 +681,16 @@ export default {
     "reset": "Reset",
     "resetPw": "Reset password",
     "resetPwDesc": "The new password takes effect immediately and all of the user's sessions are signed out.",
+    "resetTwoFactor": "Reset 2FA",
+    "resetTwoFactorConfirm": "Reset two-step verification for {name}? Their authenticator stops working; they can bind a new one.",
+    "resetTwoFactorHint": "Remove the user's authenticator (lost phone)",
     "role": {
       "admin": "Administrator",
       "user": "User"
     },
     "search": "Search users",
+    "twoFactorOn": "2FA",
+    "twoFactorReset": "Two-step verification reset",
     "usernameHint": "lowercase letters, digits, . _ -",
     "usernameRule": "Usernames start with a lowercase letter or digit and contain only lowercase letters, digits, \".\", \"_\" and \"-\" (max 32)",
     "you": "(you)"

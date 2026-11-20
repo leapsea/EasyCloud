@@ -2,7 +2,7 @@ import { qs, request } from './client'
 
 export interface User {
   id: string; username: string; displayName: string; role: 'admin' | 'user'
-  disabled: boolean; quotaBytes: number; createdAt: string; groupIds: string[]
+  disabled: boolean; quotaBytes: number; createdAt: string; groupIds: string[]; twoFactor?: boolean
 }
 export interface Group { id: string; name: string; parentId?: string; createdAt: string; memberIds: string[] }
 export interface Grant {
@@ -26,6 +26,7 @@ export const adminApi = {
     request<User>('PATCH', `/api/admin/users/${id}`, patch),
   deleteUser: (id: string) => request<void>('DELETE', `/api/admin/users/${id}`),
   resetPassword: (id: string, password: string) => request<void>('POST', `/api/admin/users/${id}/password`, { password }),
+  resetTwoFactor: (id: string) => request<void>('POST', `/api/admin/users/${id}/2fa/reset`),
 
   groups: () => request<{ items: Group[] }>('GET', '/api/admin/groups'),
   createGroup: (name: string, parentId?: string) => request<Group>('POST', '/api/admin/groups', { name, parentId: parentId ?? '' }),
