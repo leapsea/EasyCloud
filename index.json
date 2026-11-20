@@ -1,0 +1,18 @@
+{
+  "plugins": [
+    {
+      "id": "samba-gateway",
+      "name": "Samba 网关",
+      "type": "backend",
+      "description": "通过 SMB 共享被授权的目录（Windows/macOS 网络磁盘）。账户使用各用户在「我的账号」中生成的应用密码；可选由插件管理 Samba 容器。",
+      "versions": [
+        {
+          "version": "1.0.1",
+          "url": "https://github.com/leapsea/EasyCloud/releases/download/plugins/samba-gateway/v1.0.1/samba-gateway-1.0.1.zip",
+          "sha256": "aea8c27e147858964eb68b0a2dfc82a4337b29a1131a416d7bd182fef8158f8c",
+          "engine": ">=0.4.0"
+        }
+      ]
+    }
+  ]
+}
