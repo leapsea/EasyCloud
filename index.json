@@ -1,6 +1,20 @@
 {
   "plugins": [
     {
+      "id": "ffmpeg-thumbnail",
+      "name": "FFmpeg 缩略图",
+      "type": "backend",
+      "description": "使用 ffmpeg 为视频、HEIC/HEIF 照片和相机 RAW 文件生成缩略图。需要宿主或容器中可用的 ffmpeg。",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "url": "https://github.com/leapsea/EasyCloud/releases/download/plugins/ffmpeg-thumbnail/v1.0.0/ffmpeg-thumbnail-1.0.0.zip",
+          "sha256": "4a3f1e0d04d3b3eab00e79441e95699cd7252f9f896d60168e974b540de44fe3",
+          "engine": ">=0.3.0"
+        }
+      ]
+    },
+    {
       "id": "samba-gateway",
       "name": "Samba 网关",
       "type": "backend",
