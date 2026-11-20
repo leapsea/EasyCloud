@@ -709,6 +709,64 @@ func (s *FileService) Replace(ctx context.Context, sub pathguard.Subject, raw st
 	return toEntry(p, nfi), nil
 }
 
+// CreateFile writes r to a new file at raw, which must not exist yet: it never
+// replaces anything. Write permission and the quota (size bytes) are checked
+// first; data goes to a temporary file in the same directory that only takes
+// the final name once complete, so a failed or cancelled write leaves nothing
+// behind. Progress and cancellation follow WithProgress / ctx.
+func (s *FileService) CreateFile(ctx context.Context, sub pathguard.Subject, raw string, r io.Reader, size int64) (domain.FileEntry, error) {
+	p, h, err := s.check(ctx, sub, raw, pathguard.PermWrite)
+	if err != nil {
+		return domain.FileEntry{}, err
+	}
+	defer h.Close()
+	if h.Rel == "." {
+		return domain.FileEntry{}, errs.ErrInvalidPath
+	}
+	if fi, err := h.Root.Stat(path.Dir(h.Rel)); err != nil || !fi.IsDir() {
+		return domain.FileEntry{}, errs.ErrNotFound
+	}
+	if _, err := h.Root.Lstat(h.Rel); err == nil {
+		return domain.FileEntry{}, errs.ErrConflict.WithDetail(p.Name())
+	}
+	if err := s.checkQuota(ctx, sub, p, size); err != nil {
+		return domain.FileEntry{}, err
+	}
+	tmp := path.Join(path.Dir(h.Rel), ".~easycloud-"+newID()+".tmp")
+	out, err := h.Root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return domain.FileEntry{}, mapFSErr(err)
+	}
+	defer h.Root.Remove(tmp) // gone after the link below, or on any failure
+	_, err = io.Copy(&progressWriter{w: out, ctx: ctx, report: progressFrom(ctx)}, r)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return domain.FileEntry{}, err
+	}
+	// A hard link takes the name only if it is still free (a file created by
+	// someone else meanwhile is not overwritten). Filesystems without hard
+	// links fall back to check-then-rename.
+	if err := h.Root.Link(tmp, h.Rel); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return domain.FileEntry{}, errs.ErrConflict.WithDetail(p.Name())
+		}
+		if _, lerr := h.Root.Lstat(h.Rel); lerr == nil {
+			return domain.FileEntry{}, errs.ErrConflict.WithDetail(p.Name())
+		}
+		if err := h.Root.Rename(tmp, h.Rel); err != nil {
+			return domain.FileEntry{}, mapFSErr(err)
+		}
+	}
+	s.publish("created", p.Parent())
+	fi, err := h.Root.Stat(h.Rel)
+	if err != nil {
+		return domain.FileEntry{}, mapFSErr(err)
+	}
+	return toEntry(p, fi), nil
+}
+
 // RenamePath moves src to the exact path dst (WebDAV MOVE semantics: the
 // caller has already removed an existing destination when overwriting).
 func (s *FileService) RenamePath(ctx context.Context, sub pathguard.Subject, src, dst string) error {

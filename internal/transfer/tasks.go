@@ -23,7 +23,13 @@ const (
 	TaskCopy    = "copy"
 	TaskMove    = "move"
 	TaskExtract = "extract"
+	// TaskVideoFix saves a playback-fixed copy of a video next to it (see
+	// internal/media/playback); available once SetVideoFixer is called.
+	TaskVideoFix = "videofix"
 )
+
+// VideoFixer writes the fixed copy of a video and returns its path.
+type VideoFixer func(ctx context.Context, sub pathguard.Subject, path string) (string, error)
 
 type TaskParams struct {
 	Sources    []string           `json:"sources"`
@@ -59,6 +65,8 @@ type TaskManager struct {
 	notify  func(userID string, t Task)
 	log     *slog.Logger
 
+	videoFix VideoFixer
+
 	queue   chan string
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
@@ -93,6 +101,9 @@ func (m *TaskManager) get(ctx context.Context, id string) (Task, error) {
 }
 
 // Create validates and enqueues a task.
+// SetVideoFixer enables the videofix task kind.
+func (m *TaskManager) SetVideoFixer(f VideoFixer) { m.videoFix = f }
+
 func (m *TaskManager) Create(ctx context.Context, sub pathguard.Subject, kind string, p TaskParams) (Task, error) {
 	switch kind {
 	case TaskCopy, TaskMove:
@@ -105,6 +116,13 @@ func (m *TaskManager) Create(ctx context.Context, sub pathguard.Subject, kind st
 	case TaskExtract:
 		if len(p.Sources) != 1 || app.ArchiveKind(p.Sources[0]) == "" {
 			return Task{}, errs.ErrInvalidInput.WithDetail("extract needs exactly one zip/tar/tar.gz file")
+		}
+	case TaskVideoFix:
+		if m.videoFix == nil {
+			return Task{}, errs.ErrInvalidInput.WithDetail("unknown task kind")
+		}
+		if len(p.Sources) != 1 {
+			return Task{}, errs.ErrInvalidInput.WithDetail("videofix needs exactly one video")
 		}
 	default:
 		return Task{}, errs.ErrInvalidInput.WithDetail("unknown task kind")
@@ -276,6 +294,12 @@ func (m *TaskManager) execute(parent context.Context, id string) {
 	case TaskExtract:
 		var dest string
 		dest, err = m.files.Extract(pctx, sub, t.Params.Sources[0])
+		if dest != "" {
+			result = []string{dest}
+		}
+	case TaskVideoFix:
+		var dest string
+		dest, err = m.videoFix(pctx, sub, t.Params.Sources[0])
 		if dest != "" {
 			result = []string{dest}
 		}

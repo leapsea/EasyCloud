@@ -105,6 +105,55 @@ func TestVideoPlaybackFix(t *testing.T) {
 		t.Fatalf("cached plans: %v", m)
 	}
 
+	// Saving the fixed copy: a task writes "<name>-fix.mp4" next to the original,
+	// byte for byte the stream the player gets, and never replaces anything.
+	streamed, _ := os.ReadFile(fixed)
+	runTask := func(c *client, name string) map[string]any {
+		t.Helper()
+		code, task := c.do("POST", "/api/tasks", map[string]any{"kind": "videofix", "sources": []string{"/share/v/" + name}})
+		if code != 202 {
+			t.Fatalf("videofix %s: %d %v", name, code, task)
+		}
+		var final map[string]any
+		waitFor(t, "videofix task", func() bool {
+			_, l := c.do("GET", "/api/tasks", nil)
+			for _, it := range l["items"].([]any) {
+				m := it.(map[string]any)
+				if m["id"] == task["id"] && m["status"] != "queued" && m["status"] != "running" {
+					final = m
+					return true
+				}
+			}
+			return false
+		})
+		return final
+	}
+	if task := runTask(admin, "tail.mp4"); task["status"] != "done" || toStrings(task["result"])[0] != "/share/v/tail-fix.mp4" {
+		t.Fatalf("videofix: %v", task)
+	}
+	saved, err := os.ReadFile(filepath.Join(dir, "tail-fix.mp4"))
+	if err != nil || !bytes.Equal(saved, streamed) {
+		t.Fatalf("saved copy differs from the fixed stream (%d vs %d bytes, %v)", len(saved), len(streamed), err)
+	}
+	if hash(filepath.Join(dir, "tail-fix.mp4")) != hash(tail) {
+		t.Fatal("saved copy changed the media data")
+	}
+	if after, _ := os.ReadFile(tail); !bytes.Equal(before, after) {
+		t.Fatal("the source file was modified by saving")
+	}
+	if tmp, _ := filepath.Glob(filepath.Join(dir, ".~easycloud-*")); len(tmp) != 0 {
+		t.Fatalf("temporary files left: %v", tmp)
+	}
+	if task := runTask(admin, "tail.mp4"); task["status"] != "failed" || !strings.Contains(task["message"].(string), "CONFLICT") {
+		t.Fatalf("second save should conflict: %v", task)
+	}
+	if task := runTask(admin, "ready.mp4"); task["status"] != "failed" {
+		t.Fatalf("a video that needs no fix must not be saved: %v", task)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ready-fix.mp4")); err == nil {
+		t.Fatal("ready-fix.mp4 written")
+	}
+
 	// Same authorization as downloads: no grant, no video.
 	admin.do("POST", "/api/admin/users", map[string]any{"username": "alice", "password": "alicepass1"})
 	alice := e.client()
@@ -114,6 +163,9 @@ func TestVideoPlaybackFix(t *testing.T) {
 	}
 	if res := get(alice, "tail.mp4", ""); res.StatusCode != 404 {
 		t.Fatalf("alice stream: %d", res.StatusCode)
+	}
+	if code, _ := alice.do("POST", "/api/tasks", map[string]any{"kind": "videofix", "sources": []string{"/share/v/tail.mp4"}}); code != 404 {
+		t.Fatalf("alice videofix: %d", code)
 	}
 }
 

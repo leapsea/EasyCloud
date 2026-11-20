@@ -3,3 +3,4 @@
 # EASYCLOUD_PLUGINS_TRUSTED_KEYS adds more. Keep the old key here for a while
 # after rotating so already-published versions stay installable.
 # Generate: go run ./cmd/ecplugin keygen -out official   (see docs/release.md)
+PchZGuuLRpJjXC2108gRzSTSrava9a0fHmh53+Sycbo=

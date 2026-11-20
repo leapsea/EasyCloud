@@ -370,6 +370,7 @@ export default {
     "errorCodec": "浏览器无法播放此视频，可能是编码或格式不受支持（如 HEVC、MKV）。可下载后用本地播放器打开。",
     "errorNetwork": "加载视频时网络中断，请重试。",
     "exitFullscreen": "退出全屏",
+    "expand": "展开",
     "fix": {
       "ctts": "该视频缺少帧显示顺序信息（B 帧时间戳），浏览器会出现卡顿，已在播放时自动修正。源文件未改动。",
       "faststart": "播放索引位于文件末尾，已调整到开头以加快起播和拖动。"
@@ -392,17 +393,23 @@ export default {
     "loopOff": "循环播放：关",
     "loopOn": "循环播放：开",
     "maximize": "最大化",
+    "minimize": "最小化",
     "mute": "静音",
     "muted": "已静音",
     "normal": "正常",
     "normalSpeed": "正常速度",
     "pause": "暂停",
-    "pip": "小窗播放",
+    "pip": "画中画",
     "play": "播放",
     "progress": "播放进度",
     "replay": "重新播放",
     "restore": "还原",
     "resumed": "已从 {t} 继续播放",
+    "saveFixed": "保存",
+    "saveFixedTip": "在同一目录保存修复后的文件：{name}（原文件不变）",
+    "saveStarted": "正在保存 {name}，可在任务列表查看进度",
+    "saved": "已保存",
+    "saving": "保存中",
     "shortcutsTitle": "快捷键",
     "speed": "播放速度",
     "speedIs": "{n} 倍速",
@@ -532,13 +539,15 @@ export default {
     "done": {
       "copy": "复制完成",
       "extract": "解压完成",
-      "move": "移动完成"
+      "move": "移动完成",
+      "videofix": "修复后的视频已保存"
     },
     "failed": "任务失败：{message}",
     "kind": {
       "copy": "复制",
       "extract": "解压",
-      "move": "移动"
+      "move": "移动",
+      "videofix": "保存修复视频"
     }
   },
   "theme": {
@@ -571,6 +580,7 @@ export default {
     "clear": "清除已完成",
     "collapse": "收起",
     "done": "完成",
+    "empty": "暂无传输任务",
     "expand": "展开",
     "failedMsg": "失败：{message}",
     "failedN": "失败 {n}",

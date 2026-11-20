@@ -370,6 +370,7 @@ export default {
     "errorCodec": "This browser cannot play this video; its codec or container is probably unsupported (e.g. HEVC, MKV). Download it to play locally.",
     "errorNetwork": "The network failed while loading the video. Please try again.",
     "exitFullscreen": "Exit fullscreen",
+    "expand": "Expand",
     "fix": {
       "ctts": "This video lacks frame ordering data (B-frame timestamps), which makes browsers stutter; it is corrected during playback. The file itself is unchanged.",
       "faststart": "Its index sits at the end of the file and is served first for faster start and seeking."
@@ -392,6 +393,7 @@ export default {
     "loopOff": "Loop: off",
     "loopOn": "Loop: on",
     "maximize": "Maximize",
+    "minimize": "Minimize",
     "mute": "Mute",
     "muted": "Muted",
     "normal": "Normal",
@@ -403,6 +405,11 @@ export default {
     "replay": "Replay",
     "restore": "Restore",
     "resumed": "Resumed from {t}",
+    "saveFixed": "Save",
+    "saveFixedTip": "Save the fixed file in the same folder as {name} (the original stays unchanged)",
+    "saveStarted": "Saving {name}; see the task list for progress",
+    "saved": "Saved",
+    "saving": "Saving",
     "shortcutsTitle": "Keyboard shortcuts",
     "speed": "Speed",
     "speedIs": "{n}× speed",
@@ -532,13 +539,15 @@ export default {
     "done": {
       "copy": "Copy finished",
       "extract": "Extraction finished",
-      "move": "Move finished"
+      "move": "Move finished",
+      "videofix": "Fixed video saved"
     },
     "failed": "Task failed: {message}",
     "kind": {
       "copy": "Copy",
       "extract": "Extract",
-      "move": "Move"
+      "move": "Move",
+      "videofix": "Save fixed video"
     }
   },
   "theme": {
@@ -571,6 +580,7 @@ export default {
     "clear": "Clear finished",
     "collapse": "Collapse",
     "done": "Done",
+    "empty": "No transfers yet",
     "expand": "Expand",
     "failedMsg": "Failed: {message}",
     "failedN": "{n} failed",

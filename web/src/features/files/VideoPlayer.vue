@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import {
-  Airplay, Cast, Copy, Download, FileVideo, Keyboard, LoaderCircle, Maximize, Minimize, Minus,
-  Pause, Play, Repeat, RotateCcw, Square, TriangleAlert, Volume1, Volume2, VolumeX, X,
+  Airplay, Cast, Copy, Download, FileVideo, Keyboard, LoaderCircle, Maximize, Maximize2, Minimize, Minus, PictureInPicture2,
+  Check, Pause, Play, Repeat, RotateCcw, Save, Square, TriangleAlert, Volume1, Volume2, VolumeX, X,
 } from 'lucide-vue-next'
 import { filesApi, type FileEntry } from '@/api/files'
 import { useModalLayer } from '@/components/modalStack'
+import { useTasks } from '@/stores/tasks'
+import { useToast } from '@/stores/toast'
 
 // Video viewer. The picture fills the window; the title bar and the control bar
 // float over it and fade out when the pointer leaves or rests (a "clean screen").
@@ -40,8 +41,52 @@ async function choose(path: string) {
 }
 const fixTip = computed(() => fixes.value.map((r) => t(`player.fix.${r}`)).join(' '))
 
-const layer = useModalLayer()
-watch(open, (o) => (o ? layer.push() : layer.pop()), { immediate: true })
+// Save the fixed version next to the original as "<name>-fix.<ext>" (a server
+// task: the copy can be gigabytes; progress shows in the task panel).
+const tasks = useTasks()
+const toast = useToast()
+// Save state per video path: 'saving' until the task ends, then 'saved'; a
+// failed task clears it so the button can be used again.
+const saveState = ref<Record<string, 'saving' | 'saved'>>({})
+const offTask = tasks.onFinished((tk) => {
+  const p = tk.kind === 'videofix' ? tk.params.sources[0] : ''
+  if (!p || !saveState.value[p]) return
+  if (tk.status === 'done') saveState.value = { ...saveState.value, [p]: 'saved' }
+  else { const { [p]: _, ...rest } = saveState.value; saveState.value = rest }
+})
+onBeforeUnmount(offTask)
+const saveLabel = computed(() => {
+  const st = props.entry ? saveState.value[props.entry.path] : undefined
+  return st === 'saving' ? t('player.saving') : st === 'saved' ? t('player.saved') : t('player.saveFixed')
+})
+const fixedName = computed(() => {
+  const n = props.entry?.name ?? ''
+  const dot = n.lastIndexOf('.')
+  return dot > 0 ? `${n.slice(0, dot)}-fix${n.slice(dot)}` : `${n}-fix`
+})
+async function saveFixed() {
+  const e = props.entry
+  if (!e) return
+  try {
+    saveState.value = { ...saveState.value, [e.path]: 'saving' }
+    await tasks.create('videofix', [e.path])
+    toast.push({ kind: 'info', text: t('player.saveStarted', { name: fixedName.value }) })
+  } catch (err) {
+    const { [e.path]: _, ...rest } = saveState.value
+    saveState.value = rest
+    toast.error(err)
+  }
+}
+
+// Window states: centred, maximized (fills the viewport) or minimized (a small
+// player in the corner without the backdrop, so the page stays usable). Only
+// the frame's classes change between them: the <video> element is never
+// recreated, so playback continues.
+const mini = ref(false)
+const titleId = 'video-player-title'
+
+const layer = useModalLayer() // only the full-size player is a modal layer
+watch(() => open.value && !mini.value, (o) => (o ? layer.push() : layer.pop()), { immediate: true })
 onBeforeUnmount(layer.pop)
 const z = computed(() => 40 + Math.max(0, layer.depth.value) * 10)
 
@@ -178,7 +223,13 @@ function setRate(r: number) {
 }
 function close() {
   savePosition()
+  mini.value = false
   emit('close')
+}
+// Double-click: fullscreen for the full player, back to full size for the mini one.
+function onDblClick() {
+  if (mini.value) mini.value = false
+  else toggleFullscreen()
 }
 
 // ---------- window, fullscreen, picture-in-picture, casting ----------
@@ -195,12 +246,14 @@ function toggleFullscreen() {
   if (el?.requestFullscreen) el.requestFullscreen().catch(() => {})
   else (video.value as HTMLVideoElement & { webkitEnterFullscreen?: () => void })?.webkitEnterFullscreen?.() // iOS Safari
 }
+// Native picture-in-picture (where supported). The page-side player shrinks to
+// the corner meanwhile instead of leaving a large black "playing elsewhere" box.
 async function pip() {
   const v = video.value
   if (!v) return
   try {
     if (document.pictureInPictureElement) await document.exitPictureInPicture()
-    else await v.requestPictureInPicture()
+    else { await v.requestPictureInPicture(); mini.value = true }
   } catch { /* not allowed right now */ }
 }
 type CastVideo = HTMLVideoElement & {
@@ -318,11 +371,22 @@ function onKey(e: KeyboardEvent) {
   else handled = false
   if (handled) { e.preventDefault(); keyActive.value = true; poke() }
 }
-function onEscape(e: KeyboardEvent) {
-  // Esc first closes a menu or leaves fullscreen; only then the player.
-  if (menu.value) { menu.value = ''; e.preventDefault() }
-  else if (document.fullscreenElement) e.preventDefault()
+// Esc first closes a menu or leaves fullscreen (the browser does that), then the
+// full-size player. A minimized player stays until closed or expanded.
+function onDocKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !open.value) return
+  if (menu.value) { menu.value = ''; e.preventDefault(); return }
+  if (document.fullscreenElement || mini.value) return
+  e.preventDefault()
+  close()
 }
+const frame = computed(() => mini.value
+  ? 'bottom-4 right-4 aspect-video rounded-xl ring-1 ring-white/15'
+  : maximized.value ? 'inset-0' : 'left-1/2 top-1/2 aspect-video -translate-x-1/2 -translate-y-1/2 rounded-xl')
+const frameStyle = computed(() => ({
+  zIndex: mini.value ? 35 : z.value + 1, // the mini player sits below dialogs (z 40+) opened over the page
+  width: mini.value ? 'min(380px, calc(100vw - 2rem))' : maximized.value ? undefined : 'min(94vw, 1120px, calc(86vh * 16 / 9))',
+}))
 
 // ---------- lifecycle ----------
 watch(video, (v) => { if (v) watchCast(v as CastVideo) })
@@ -331,14 +395,19 @@ watch(() => props.entry?.path, (p, old) => {
   if (!p) return
   error.value = ''; waiting.value = true; ended.value = false; paused.value = true
   current.value = 0; duration.value = 0; buffered.value = 0; menu.value = ''; osd.value = ''
-  hovering.value = true; poke()
+  hovering.value = true; poke(); mini.value = false
   choose(p)
   nextTick(() => stage.value?.focus())
 })
-onMounted(() => { loadPrefs(); document.addEventListener('fullscreenchange', onFsChange) })
+onMounted(() => {
+  loadPrefs()
+  document.addEventListener('fullscreenchange', onFsChange)
+  document.addEventListener('keydown', onDocKey)
+})
 onBeforeUnmount(() => {
   savePosition()
   document.removeEventListener('fullscreenchange', onFsChange)
+  document.removeEventListener('keydown', onDocKey)
   clearTimeout(idleTimer); clearTimeout(osdTimer)
 })
 
@@ -353,20 +422,17 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
 </script>
 
 <template>
-  <DialogRoot :open="open" @update:open="(v) => { if (!v) close() }">
-    <DialogPortal>
-      <!-- Opening animates (CSS on data-state); closing is instant on purpose: a leave
-           animation makes unmounting wait for animationend, which background tabs
-           never fire, and a quick reopen then meets a half-closed ghost player. -->
-      <DialogOverlay class="vp-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px]" :style="{ zIndex: z }" />
-      <DialogContent
-          :aria-describedby="undefined"
-          class="vp-content fixed overflow-hidden bg-black shadow-[0_32px_80px_-12px_rgb(0_0_0/0.6)] outline-none"
-          :class="maximized ? 'inset-0' : 'left-1/2 top-1/2 aspect-video -translate-x-1/2 -translate-y-1/2 rounded-xl'"
-          :style="{ zIndex: z + 1, width: maximized ? undefined : 'min(94vw, 1120px, calc(86vh * 16 / 9))' }"
-          @escape-key-down="onEscape"
-          @open-auto-focus.prevent="stage?.focus()"
-        >
+  <Teleport to="body">
+    <template v-if="open">
+      <!-- A plain layer rather than a dialog component: switching between modal
+           (full size) and non-modal (minimized) must not remount the <video>.
+           Opening animates; closing is instant (no leave animation to wait for). -->
+      <div v-if="!mini" class="vp-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px]" :style="{ zIndex: z }" @click="close" />
+      <div
+        role="dialog" :aria-modal="mini ? undefined : 'true'" :aria-labelledby="titleId"
+        class="vp-content fixed overflow-hidden bg-black shadow-[0_32px_80px_-12px_rgb(0_0_0/0.6)] outline-none"
+        :class="frame" :style="frameStyle"
+      >
           <div
             ref="stage" tabindex="-1"
             class="relative h-full w-full select-none bg-black text-white outline-none"
@@ -376,7 +442,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
             <video
               v-if="entry && src" ref="video" :key="entry.path" :src="src" :loop="loop" autoplay playsinline preload="metadata"
               class="absolute inset-0 h-full w-full object-contain"
-              @click="onStageClick" @dblclick="toggleFullscreen"
+              @click="onStageClick" @dblclick="onDblClick"
               @loadedmetadata="onLoaded" @durationchange="duration = video?.duration || 0" @timeupdate="onTime" @progress="onProgress"
               @play="paused = false; ended = false" @pause="paused = true; savePosition()" @playing="waiting = false"
               @waiting="waiting = true" @canplay="waiting = false" @ended="ended = true; paused = true; savePosition()"
@@ -415,18 +481,26 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
             <div
               class="absolute inset-x-0 top-0 flex h-14 items-start gap-2 bg-gradient-to-b from-black/75 via-black/35 to-transparent px-3 pt-2.5 transition-opacity duration-300"
               :class="chrome ? 'opacity-100' : 'pointer-events-none opacity-0'"
-              @click.self="onStageClick" @dblclick.self="toggleFullscreen"
+              @click.self="onStageClick" @dblclick.self="onDblClick"
             >
               <FileVideo class="mt-2 h-4 w-4 shrink-0 text-white/80" :stroke-width="1.75" />
-              <DialogTitle class="mt-1.5 min-w-0 truncate text-sm font-medium leading-6 text-white/95" :title="entry?.name">{{ entry?.name }}</DialogTitle>
+              <h2 :id="titleId" class="mt-1.5 min-w-0 truncate text-sm font-medium leading-6 text-white/95" :title="entry?.name">{{ entry?.name }}</h2>
               <span
-                v-if="fixes.includes('ctts')" class="mt-2 shrink-0 cursor-help rounded-full bg-white/15 px-2 py-0.5 text-[11px] leading-4 text-white/85"
+                v-if="fixes.includes('ctts') && !mini" class="mt-2 shrink-0 cursor-help rounded-full bg-white/15 px-2 py-0.5 text-[11px] leading-4 text-white/85"
                 :title="fixTip" tabindex="0" :aria-label="fixTip"
               >{{ $t('player.fixedBadge') }}</span>
+              <button
+                v-if="fixes.includes('ctts') && !mini"
+                class="mt-1.5 flex h-6 shrink-0 items-center gap-1 rounded-full bg-white/15 px-2.5 text-[11px] text-white/90 transition-colors hover:bg-white/25 disabled:cursor-default disabled:opacity-50"
+                :disabled="!!(entry && saveState[entry.path])" :title="$t('player.saveFixedTip', { name: fixedName })" @click="saveFixed"
+              ><Check v-if="entry && saveState[entry.path] === 'saved'" class="h-3.5 w-3.5" /><Save v-else class="h-3.5 w-3.5" />{{ saveLabel }}</button>
               <span class="flex-1" />
-              <button :class="icon" :title="$t('common.download')" :aria-label="$t('common.download')" @click="entry && emit('download', entry)"><Download class="h-[18px] w-[18px]" /></button>
-              <button v-if="pipSupported" :class="icon" :title="$t('player.pip')" :aria-label="$t('player.pip')" @click="pip"><Minus class="h-[18px] w-[18px]" /></button>
-              <button v-if="!fullscreen" :class="icon" :title="maximized ? $t('player.restore') : $t('player.maximize')" :aria-label="maximized ? $t('player.restore') : $t('player.maximize')" @click="maximized = !maximized">
+              <template v-if="!mini">
+                <button :class="icon" :title="$t('common.download')" :aria-label="$t('common.download')" @click="entry && emit('download', entry)"><Download class="h-[18px] w-[18px]" /></button>
+                <button v-if="!fullscreen" :class="icon" :title="$t('player.minimize')" :aria-label="$t('player.minimize')" @click="mini = true"><Minus class="h-[18px] w-[18px]" /></button>
+              </template>
+              <button v-else :class="icon" :title="$t('player.expand')" :aria-label="$t('player.expand')" @click="mini = false"><Maximize2 class="h-4 w-4" /></button>
+              <button v-if="!fullscreen && !mini" :class="icon" :title="maximized ? $t('player.restore') : $t('player.maximize')" :aria-label="maximized ? $t('player.restore') : $t('player.maximize')" @click="maximized = !maximized">
                 <Copy v-if="maximized" class="h-4 w-4 -scale-x-100" /><Square v-else class="h-4 w-4" />
               </button>
               <button :class="icon" :title="$t('common.close')" :aria-label="$t('common.close')" @click="close"><X class="h-5 w-5" /></button>
@@ -436,7 +510,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
             <div
               class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-2 pt-10 transition-opacity duration-300"
               :class="chrome ? 'opacity-100' : 'pointer-events-none opacity-0'"
-              @click.self="onStageClick" @dblclick.self="toggleFullscreen"
+              @click.self="onStageClick" @dblclick.self="onDblClick"
             >
               <!-- Progress: buffered, played, hover preview time; drag to scrub. -->
               <div
@@ -468,7 +542,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
                     <component :is="volIcon" class="h-5 w-5" />
                   </button>
                   <input
-                    type="range" min="0" max="1" step="0.01" :value="muted ? 0 : volume" :aria-label="$t('player.volume')"
+                    v-if="!mini" type="range" min="0" max="1" step="0.01" :value="muted ? 0 : volume" :aria-label="$t('player.volume')"
                     class="h-1 w-0 cursor-pointer accent-white opacity-0 transition-all duration-200 group-hover/vol:mr-2 group-hover/vol:w-20 group-hover/vol:opacity-100 focus-visible:mr-2 focus-visible:w-20 focus-visible:opacity-100"
                     @input="setVolume(Number(($event.target as HTMLInputElement).value))"
                   />
@@ -477,6 +551,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
 
                 <div class="ml-auto flex items-center gap-1">
                   <!-- Speed, loop and shortcuts sit directly on the bar; their lists open upwards. -->
+                  <template v-if="!mini">
                   <div class="relative">
                     <button
                       class="flex h-9 min-w-12 items-center justify-center rounded-md px-2 text-[13px] font-medium tabular-nums text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
@@ -496,10 +571,11 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
                     :title="loop ? $t('player.loopOn') : $t('player.loop')" :aria-label="$t('player.loop')"
                     @click="loop = !loop; flash(loop ? $t('player.loopOn') : $t('player.loopOff'))"
                   ><Repeat class="h-5 w-5" /></button>
-                  <button v-if="castAvailable" :class="icon" :title="$t('player.cast')" :aria-label="$t('player.cast')" @click="cast">
+                  </template>
+                  <button v-if="castAvailable && !mini" :class="icon" :title="$t('player.cast')" :aria-label="$t('player.cast')" @click="cast">
                     <Airplay v-if="castKind === 'airplay'" class="h-5 w-5" /><Cast v-else class="h-5 w-5" />
                   </button>
-                  <div class="relative hidden sm:block">
+                  <div v-if="!mini" class="relative hidden sm:block">
                     <button
                       :class="[icon, menu === 'keys' && 'bg-white/15']" :title="$t('player.shortcutsTitle')" :aria-label="$t('player.shortcutsTitle')"
                       :aria-expanded="menu === 'keys'" @click.stop="menu = menu === 'keys' ? '' : 'keys'"
@@ -512,6 +588,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
                       </div>
                     </div>
                   </div>
+                  <button v-if="pipSupported" :class="icon" :title="$t('player.pip')" :aria-label="$t('player.pip')" @click="pip"><PictureInPicture2 class="h-5 w-5" /></button>
                   <button :class="icon" :title="fullscreen ? $t('player.exitFullscreen') : $t('player.fullscreen')" :aria-label="fullscreen ? $t('player.exitFullscreen') : $t('player.fullscreen')" @click="toggleFullscreen">
                     <Minimize v-if="fullscreen" class="h-5 w-5" /><Maximize v-else class="h-5 w-5" />
                   </button>
@@ -519,17 +596,17 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
               </div>
             </div>
           </div>
-        </DialogContent>
-    </DialogPortal>
-  </DialogRoot>
+      </div>
+    </template>
+  </Teleport>
 </template>
 
 <style>
-.vp-overlay[data-state='open'] { animation: vp-fade-in 0.18s ease-out; }
-.vp-content[data-state='open'] { animation: vp-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.vp-overlay { animation: vp-fade-in 0.18s ease-out; }
+.vp-content { animation: vp-zoom-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes vp-fade-in { from { opacity: 0; } }
 @keyframes vp-zoom-in { from { opacity: 0; scale: 0.97; } }
 @media (prefers-reduced-motion: reduce) {
-  .vp-overlay[data-state], .vp-content[data-state] { animation: none; }
+  .vp-overlay, .vp-content { animation: none; }
 }
 </style>

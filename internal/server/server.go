@@ -185,6 +185,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 			return b
 		},
 		func(uid string, t transfer.Task) { hub.Broadcast("tasks:"+uid, t) }, log)
+	tasks.SetVideoFixer(player.SaveFixed)
 	plugins.SetAccountSource(func(ctx context.Context) (*pluginsdk.SyncRequest, error) {
 		req, err := ids.ProtocolSnapshot(ctx)
 		if req != nil {

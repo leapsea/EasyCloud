@@ -5,7 +5,7 @@ import { realtime } from '@/api/realtime'
 import { useAuth } from './auth'
 
 export interface Task {
-  id: string; kind: 'copy' | 'move' | 'extract'; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  id: string; kind: 'copy' | 'move' | 'extract' | 'videofix'; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   params: { sources: string[]; dest?: string }; doneBytes: number; totalBytes: number; message?: string; result?: string[]
   createdAt: string; updatedAt: string
 }

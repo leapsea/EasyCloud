@@ -4,6 +4,7 @@
 package playback
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
@@ -20,6 +21,8 @@ import (
 
 	"github.com/easycloud/easycloud/internal/audit"
 	"github.com/easycloud/easycloud/internal/media/mp4fix"
+	"github.com/easycloud/easycloud/internal/pathguard"
+	"github.com/easycloud/easycloud/internal/platform/errs"
 	"github.com/easycloud/easycloud/internal/platform/httpx"
 	"github.com/easycloud/easycloud/internal/storage/app"
 	"github.com/easycloud/easycloud/internal/storage/domain"
@@ -162,6 +165,43 @@ func (s *Service) Prune(maxAge time.Duration) {
 			_ = os.Remove(filepath.Join(s.dir, d.Name()))
 		}
 	}
+}
+
+// FixedName is the name a fixed copy is saved under: "-fix" before the extension.
+func FixedName(name string) string {
+	ext := filepath.Ext(name)
+	return strings.TrimSuffix(name, ext) + "-fix" + ext
+}
+
+// SaveFixed writes the fixed version of the video at raw next to it as
+// FixedName(name), leaving the original untouched. It needs read access to
+// the video and write access to its folder, refuses to replace an existing
+// file, and reports progress through app.WithProgress (it runs as a task).
+func (s *Service) SaveFixed(ctx context.Context, sub pathguard.Subject, raw string) (string, error) {
+	f, e, err := s.files.Open(ctx, sub, raw)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	p := s.plan(f, e)
+	if p == nil {
+		return "", errs.ErrInvalidInput.WithDetail("this video plays fine and needs no fixed copy")
+	}
+	src, err := pathguard.Parse(e.Path)
+	if err != nil {
+		return "", errs.ErrInvalidPath
+	}
+	dst, err := src.Parent().Join(FixedName(e.Name))
+	if err != nil {
+		return "", errs.ErrInvalidPath
+	}
+	out, err := s.files.CreateFile(ctx, sub, dst.Display(), p.Open(f), p.Size)
+	if err != nil {
+		return "", err
+	}
+	s.audit.Record(audit.Entry{UserID: sub.UserID, Username: sub.Username, Action: "file.fix_video", Path: out.Path,
+		Detail: e.Path + " (" + strings.Join(p.Reasons, ",") + ")"})
+	return out.Path, nil
 }
 
 // Mount registers the player endpoints (caller applies authentication).

@@ -8,6 +8,7 @@ import { useAuth } from '@/stores/auth'
 import { realtime } from '@/api/realtime'
 import Toasts from '@/components/Toasts.vue'
 import UploadPanel from '@/features/upload/UploadPanel.vue'
+import TransferButton from '@/features/upload/TransferButton.vue'
 import QuotaBar from '@/components/QuotaBar.vue'
 
 const auth = useAuth()
@@ -90,11 +91,13 @@ const adminNav = [
           <QuotaBar />
           <div class="flex items-center gap-1.5 px-1 text-sm">
             <span class="min-w-0 flex-1 truncate">{{ auth.user?.displayName }}</span>
+            <TransferButton />
             <ThemeToggle />
             <button class="btn btn-sm" @click="logout">{{ $t('nav.signOut') }}</button>
           </div>
         </template>
         <div v-else class="flex flex-col items-center gap-1.5">
+          <TransferButton />
           <ThemeToggle />
           <button class="btn btn-sm !px-1.5" :title="$t('nav.signOut')" :aria-label="$t('nav.signOut')" @click="logout"><LogOut class="h-3.5 w-3.5" /></button>
         </div>
