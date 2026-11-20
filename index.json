@@ -15,6 +15,34 @@
       ]
     },
     {
+      "id": "markdown-viewer",
+      "name": "Markdown 预览",
+      "type": "viewer",
+      "description": "以排版后的样式预览 Markdown 文件。",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "url": "https://github.com/leapsea/EasyCloud/releases/download/plugins/markdown-viewer/v1.0.0/markdown-viewer-1.0.0.zip",
+          "sha256": "3d1ca154ddb62b2e3af936fa16ce08562c41b0630359844d78e14b6eb5a6ad2c",
+          "engine": ">=0.3.0"
+        }
+      ]
+    },
+    {
+      "id": "onlyoffice",
+      "name": "OnlyOffice 在线编辑",
+      "type": "connector",
+      "description": "连接你自己部署的 OnlyOffice Document Server，在线查看和编辑 Word、Excel、PowerPoint、PDF。",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "url": "https://github.com/leapsea/EasyCloud/releases/download/plugins/onlyoffice/v1.0.0/onlyoffice-1.0.0.zip",
+          "sha256": "5261d4e60f03dd26560cafc379650d8b9d3cceea6ccf127fb26a488ebfa1ac7e",
+          "engine": ">=0.3.0"
+        }
+      ]
+    },
+    {
       "id": "samba-gateway",
       "name": "Samba 网关",
       "type": "backend",
