@@ -80,16 +80,22 @@ func Mount(r chi.Router, store *Store, guard pathguard.Authorizer, log *slog.Log
 	}).With(log))
 }
 
-// MountCategories registers GET /files/category?kind=image|video|audio|doc
+// MountCategories registers GET /files/category?kind=image|video|audio|doc|other
 // [&type=<Category.Types key>|other][&sort=mtime|name|size&order=asc|desc&offset=&limit=]: the files of a kind
-// across everything the user may read. thumbable tells whether the thumbnail
-// service can render a file.
-func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thumbable func(name string) bool, log *slog.Logger) {
+// across everything the user may read. thumbs tells which files get a
+// thumbnail; for videos the response also says whether frames can be
+// rendered (videoFrames), so the UI can suggest the plugin.
+type Thumbs interface {
+	Thumbable(rel, name string) bool
+	VideoFrames() bool
+}
+
+func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thumbs Thumbs, log *slog.Logger) {
 	r.Get("/files/category", httpx.Handler(func(w http.ResponseWriter, req *http.Request) error {
 		q := req.URL.Query()
 		cat, ok := Categories[q.Get("kind")]
 		if !ok {
-			return errs.ErrInvalidInput.WithDetail("kind must be image, video, audio or doc")
+			return errs.ErrInvalidInput.WithDetail("kind must be image, video, audio, doc or other")
 		}
 		typ := q.Get("type")
 		if !cat.HasType(typ) {
@@ -118,9 +124,13 @@ func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thu
 		items := make([]categoryItem, 0, len(nodes))
 		for _, n := range nodes {
 			items = append(items, categoryItem{searchHit{Name: n.Name, Path: "/" + n.Path, Size: n.Size,
-				ModTime: n.MTime.Format("2006-01-02T15:04:05Z07:00"), Mime: n.Mime, Width: n.Width, Height: n.Height}, thumbable != nil && thumbable(n.Name)})
+				ModTime: n.MTime.Format("2006-01-02T15:04:05Z07:00"), Mime: n.Mime, Width: n.Width, Height: n.Height}, thumbs != nil && thumbs.Thumbable(n.Path, n.Name)})
 		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+		resp := map[string]any{"items": items, "total": total}
+		if cat.Name == "video" && thumbs != nil {
+			resp["videoFrames"] = thumbs.VideoFrames()
+		}
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	}).With(log))
 }

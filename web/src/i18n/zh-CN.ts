@@ -132,11 +132,15 @@ export default {
   },
   "category": {
     "count": "共 {n} 个",
+    "coverPlugin": "没有同名封面图的视频无法生成封面：未启用「FFmpeg 缩略图」插件。",
+    "coverPluginAdmin": "点击前往安装",
+    "coverPluginUser": "请联系管理员安装。",
     "empty": {
       "audio": "没有找到音频",
       "doc": "没有找到文档",
       "filtered": "没有该类型的文件",
       "image": "没有找到图片",
+      "other": "没有其他类型的文件",
       "video": "没有找到视频"
     },
     "indexHint": "分类来自文件索引，刚添加的文件可能需要片刻才会出现。",
@@ -151,6 +155,9 @@ export default {
     "sortLabel": "排序",
     "type": {
       "all": "全部",
+      "archive": "压缩包",
+      "diskImage": "镜像",
+      "installer": "安装包",
       "label": "文件类型",
       "other": "其他"
     }
@@ -391,6 +398,7 @@ export default {
       "audio": "音频",
       "doc": "文档",
       "image": "图片",
+      "other": "其他",
       "video": "视频"
     },
     "categories": "分类",

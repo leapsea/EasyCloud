@@ -31,6 +31,10 @@ func (e enricher) Enrich(ctx context.Context, dir pathguard.RelPath, entries []d
 		if d, ok := dims[entries[i].Name]; ok {
 			entries[i].Width, entries[i].Height = d[0], d[1]
 		}
-		entries[i].Thumb = e.thumbs.Supported(entries[i].Name)
+		rel := entries[i].Name
+		if !dir.IsRoot() {
+			rel = dir.String() + "/" + rel
+		}
+		entries[i].Thumb = e.thumbs.Thumbable(rel, entries[i].Name)
 	}
 }

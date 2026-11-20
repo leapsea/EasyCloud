@@ -7,7 +7,7 @@ export const router = createRouter({
     { path: '/', redirect: '/files' },
     { path: '/login', component: () => import('@/features/auth/LoginView.vue'), meta: { bare: true, public: true } },
     { path: '/files', component: () => import('@/features/files/FilesView.vue') },
-    { path: '/category/:kind(image|video|audio|doc)', component: () => import('@/features/category/CategoryView.vue') },
+    { path: '/category/:kind(image|video|audio|doc|other)', component: () => import('@/features/category/CategoryView.vue') },
     { path: '/trash', component: () => import('@/features/trash/TrashView.vue') },
     { path: '/account', component: () => import('@/features/account/AccountView.vue') },
     { path: '/shares', component: () => import('@/features/share/MySharesView.vue') },

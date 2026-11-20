@@ -19,6 +19,9 @@ type Category struct {
 	// Types are the filter tags of the category view, by extension. Files of
 	// the category that match none of them form the "other" tag.
 	Types []Subtype
+	// Rest: the category holds every file outside the others (disk images,
+	// archives, installers, ...); it has no Exts or MimePrefix of its own.
+	Rest bool
 }
 
 type Subtype struct {
@@ -30,24 +33,29 @@ type Subtype struct {
 const TypeOther = "other"
 
 var Categories = map[string]Category{
+	"other": {Name: "other", Rest: true, Types: []Subtype{
+		{"image", []string{"iso", "img", "dmg", "vhd", "vhdx", "vmdk", "qcow2"}},
+		{"archive", []string{"zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst"}},
+		{"installer", []string{"exe", "msi", "apk", "ipa", "deb", "rpm", "pkg", "appimage"}},
+	}},
 	"image": {"image", "image/", []string{"jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "tif", "tiff", "svg", "ico",
 		"heic", "heif", "raw", "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf"},
 		[]Subtype{{"jpg", []string{"jpg", "jpeg"}}, {"png", []string{"png"}}, {"gif", []string{"gif"}}, {"webp", []string{"webp"}},
-			{"heic", []string{"heic", "heif"}}, {"raw", []string{"raw", "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf"}}}},
+			{"heic", []string{"heic", "heif"}}, {"raw", []string{"raw", "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf"}}}, false},
 	"video": {"video", "video/", []string{"mp4", "m4v", "mov", "mkv", "avi", "wmv", "flv", "webm", "ts", "m2ts", "mts",
 		"3gp", "rm", "rmvb", "mpg", "mpeg", "vob"},
 		[]Subtype{{"mp4", []string{"mp4", "m4v"}}, {"mkv", []string{"mkv"}}, {"mov", []string{"mov"}}, {"avi", []string{"avi"}},
-			{"ts", []string{"ts", "m2ts", "mts"}}}},
+			{"ts", []string{"ts", "m2ts", "mts"}}}, false},
 	"audio": {"audio", "audio/", []string{"mp3", "flac", "wav", "aac", "m4a", "ogg", "oga", "opus", "wma", "ape", "aiff", "aif",
 		"alac", "dsf", "dff", "mid", "midi"},
 		[]Subtype{{"mp3", []string{"mp3"}}, {"flac", []string{"flac"}}, {"wav", []string{"wav"}}, {"aac", []string{"aac", "m4a"}},
-			{"ape", []string{"ape"}}}},
+			{"ape", []string{"ape"}}}, false},
 	"doc": {"doc", "", []string{"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "md",
 		"markdown", "csv", "epub", "mobi", "azw3", "pages", "numbers", "key", "wps", "et", "dps"},
 		[]Subtype{{"pdf", []string{"pdf"}}, {"txt", []string{"txt", "md", "markdown"}},
 			{"word", []string{"doc", "docx", "odt", "rtf", "wps", "pages"}},
 			{"excel", []string{"xls", "xlsx", "ods", "csv", "et", "numbers"}},
-			{"ppt", []string{"ppt", "pptx", "odp", "key", "dps"}}}},
+			{"ppt", []string{"ppt", "pptx", "odp", "key", "dps"}}}, false},
 }
 
 // categoryOrder fixes which category wins when the tables overlap (none do
@@ -102,6 +110,16 @@ func isASCII(s string) bool {
 // condition is a SQL predicate for the category. Every value is a constant
 // from the table above, still passed as arguments.
 func (c Category) condition() (string, []any) {
+	if c.Rest { // none of the other categories
+		var ors []string
+		var args []any
+		for _, k := range categoryOrder {
+			w, a := Categories[k].condition()
+			ors = append(ors, w)
+			args = append(args, a...)
+		}
+		return "NOT (" + strings.Join(ors, " OR ") + ")", args
+	}
 	var ors []string
 	var args []any
 	if c.MimePrefix != "" {
@@ -157,6 +175,10 @@ func (c Category) typeCondition(typ string) (string, []any) {
 	}
 	for _, t := range c.Types {
 		if t.Key == typ {
+			if c.Rest { // .iso etc. are in no other category, but keep the rule exact
+				w, a := extCondition(t.Exts)
+				return cond + " AND " + w, append(args, a...)
+			}
 			return extCondition(t.Exts)
 		}
 	}
@@ -167,6 +189,9 @@ func (c Category) typeCondition(typ string) (string, []any) {
 // the indexed category plus an IN list on ext.
 func (c Category) indexedCondition(typ string) (string, []any) {
 	cond, args := "category = ?", []any{c.Name}
+	if c.Rest { // stored as '' (directories too, hence the is_dir test)
+		cond, args = "category = '' AND is_dir = 0", nil
+	}
 	in := func(exts []string) (string, []any) {
 		a := make([]any, len(exts))
 		for i, e := range exts {

@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"io/fs"
 	"log/slog"
 	"mime"
 	"os"
@@ -46,6 +47,7 @@ type Service struct {
 	cacheDir string
 	plugins  Providers
 	log      *slog.Logger
+	root     *os.Root // the data root, for cover lookups in listings (nil: none)
 
 	sem      chan struct{}
 	mu       sync.Mutex
@@ -58,9 +60,57 @@ type call struct {
 }
 
 func New(guard pathguard.Authorizer, absRoot, cacheDir string, plugins Providers, log *slog.Logger) *Service {
-	return &Service{guard: guard, absRoot: absRoot, cacheDir: cacheDir, plugins: plugins, log: log,
+	s := &Service{guard: guard, absRoot: absRoot, cacheDir: cacheDir, plugins: plugins, log: log,
 		sem: make(chan struct{}, 2), inflight: map[string]*call{}}
+	if r, err := os.OpenRoot(absRoot); err == nil {
+		s.root = r
+	}
+	return s
 }
+
+// Video covers: a picture next to the video with the same base name
+// (movie.mp4 -> movie.jpg), or the "-poster"/"-thumb" names media managers
+// such as Kodi and Jellyfin save, wins over a frame from a plugin.
+var coverSuffixes = func() []string {
+	var out []string
+	for _, base := range []string{"", "-poster", "-thumb"} {
+		for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
+			out = append(out, base+ext, base+strings.ToUpper(ext))
+		}
+	}
+	return out
+}()
+
+func isVideo(name string) bool { return strings.HasPrefix(mimeOf(name), "video/") }
+
+// findCover returns the cover of the video at rel inside root, if any.
+func findCover(root *os.Root, rel string) (string, fs.FileInfo) {
+	if root == nil || !isVideo(rel) {
+		return "", nil
+	}
+	stem := strings.TrimSuffix(rel, path.Ext(rel))
+	for _, suf := range coverSuffixes {
+		c := stem + suf
+		if fi, err := root.Stat(c); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
+			return c, fi
+		}
+	}
+	return "", nil
+}
+
+// Thumbable reports whether a thumbnail can be produced for the file at rel
+// (relative to the data root): a supported format, or a video with a cover.
+func (s *Service) Thumbable(rel, name string) bool {
+	if s.Supported(name) {
+		return true
+	}
+	c, _ := findCover(s.root, rel)
+	return c != ""
+}
+
+// VideoFrames reports whether a plugin can render frames of videos, i.e.
+// videos without a cover still get thumbnails.
+func (s *Service) VideoFrames() bool { return s.Supported("x.mp4") }
 
 var builtin = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "image/bmp": true, "image/tiff": true}
 
@@ -119,7 +169,16 @@ func (s *Service) Get(ctx context.Context, sub pathguard.Subject, raw string, si
 	if err != nil || !fi.Mode().IsRegular() {
 		return "", time.Time{}, errs.ErrNotFound
 	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%d|%d|%d", p.String(), fi.ModTime().UnixNano(), fi.Size(), size)))
+	src := fmt.Sprintf("%s|%d|%d|%d", p.String(), fi.ModTime().UnixNano(), fi.Size(), size)
+	mod := fi.ModTime()
+	cover, cfi := findCover(h.Root, h.Rel)
+	if cover != "" { // a new or changed cover replaces the cached thumbnail
+		src += fmt.Sprintf("|cover|%s|%d|%d", path.Base(cover), cfi.ModTime().UnixNano(), cfi.Size())
+		if cfi.ModTime().After(mod) {
+			mod = cfi.ModTime()
+		}
+	}
+	sum := sha256.Sum256([]byte(src))
 	key := hex.EncodeToString(sum[:])
 	out := filepath.Join(s.cacheDir, key[:2], key+".jpg")
 	if cfi, err := os.Stat(out); err == nil {
@@ -127,14 +186,14 @@ func (s *Service) Get(ctx context.Context, sub pathguard.Subject, raw string, si
 			now := time.Now()
 			_ = os.Chtimes(out, now, now) // keep frequently viewed thumbnails out of Prune
 		}
-		return out, fi.ModTime(), nil
+		return out, mod, nil
 	}
 
 	s.mu.Lock()
 	if c, ok := s.inflight[key]; ok {
 		s.mu.Unlock()
 		<-c.done
-		return out, fi.ModTime(), c.err
+		return out, mod, c.err
 	}
 	c := &call{done: make(chan struct{})}
 	s.inflight[key] = c
@@ -153,7 +212,7 @@ func (s *Service) Get(ctx context.Context, sub pathguard.Subject, raw string, si
 		c.err = ctx.Err()
 		return "", time.Time{}, c.err
 	}
-	img, err := s.generate(ctx, h, p, size)
+	img, err := s.generate(ctx, h, p, cover, size)
 	if err != nil {
 		c.err = err
 		return "", time.Time{}, err
@@ -168,32 +227,20 @@ func (s *Service) Get(ctx context.Context, sub pathguard.Subject, raw string, si
 		return "", time.Time{}, err
 	}
 	c.err = os.Rename(tmp, out)
-	return out, fi.ModTime(), c.err
+	return out, mod, c.err
 }
 
-func (s *Service) generate(ctx context.Context, h pathguard.Handle, p pathguard.RelPath, size int) ([]byte, error) {
+func (s *Service) generate(ctx context.Context, h pathguard.Handle, p pathguard.RelPath, cover string, size int) ([]byte, error) {
 	m := mimeOf(p.Name())
 	if builtin[m] {
-		f, err := h.Root.Open(h.Rel)
-		if err != nil {
-			return nil, errs.ErrNotFound
+		return decodeFile(h.Root, h.Rel, size)
+	}
+	if cover != "" {
+		img, err := decodeFile(h.Root, cover, size)
+		if err == nil {
+			return img, nil
 		}
-		defer f.Close()
-		cfg, _, err := image.DecodeConfig(f)
-		if err != nil {
-			return nil, ErrUnsupported.Wrap(err)
-		}
-		if cfg.Width*cfg.Height > maxPixels {
-			return nil, ErrUnsupported.WithDetail("image too large to thumbnail")
-		}
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
-		img, err := imaging.Decode(f, imaging.AutoOrientation(true))
-		if err != nil {
-			return nil, ErrUnsupported.Wrap(err)
-		}
-		return encode(imaging.Fit(img, size, size, imaging.Lanczos))
+		s.log.Debug("video cover unreadable, falling back to a frame", "path", p.Display(), "err", err)
 	}
 	if s.plugins == nil || m == "" {
 		return nil, ErrUnsupported
@@ -216,6 +263,30 @@ func (s *Service) generate(ctx context.Context, h pathguard.Handle, p pathguard.
 		return res.Image, nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(res.Image)) // normalise other formats to JPEG
+	if err != nil {
+		return nil, ErrUnsupported.Wrap(err)
+	}
+	return encode(imaging.Fit(img, size, size, imaging.Lanczos))
+}
+
+// decodeFile thumbnails a picture in a built-in format.
+func decodeFile(root *os.Root, rel string, size int) ([]byte, error) {
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, errs.ErrNotFound
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return nil, ErrUnsupported.Wrap(err)
+	}
+	if cfg.Width*cfg.Height > maxPixels {
+		return nil, ErrUnsupported.WithDetail("image too large to thumbnail")
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	img, err := imaging.Decode(f, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, ErrUnsupported.Wrap(err)
 	}

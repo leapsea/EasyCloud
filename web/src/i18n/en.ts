@@ -132,11 +132,15 @@ export default {
   },
   "category": {
     "count": "{n} files",
+    "coverPlugin": "Videos without a same-name cover picture get no thumbnail: the \"FFmpeg thumbnails\" plugin is not enabled.",
+    "coverPluginAdmin": "Click to install it",
+    "coverPluginUser": "Ask an administrator to install it.",
     "empty": {
       "audio": "No audio found",
       "doc": "No documents found",
       "filtered": "No files of this type",
       "image": "No pictures found",
+      "other": "No other files",
       "video": "No videos found"
     },
     "indexHint": "Categories come from the file index; newly added files may take a moment to appear.",
@@ -151,6 +155,9 @@ export default {
     "sortLabel": "Sort",
     "type": {
       "all": "All",
+      "archive": "Archives",
+      "diskImage": "Disk images",
+      "installer": "Installers",
       "label": "File type",
       "other": "Other"
     }
@@ -391,6 +398,7 @@ export default {
       "audio": "Audio",
       "doc": "Documents",
       "image": "Pictures",
+      "other": "Other",
       "video": "Videos"
     },
     "categories": "Categories",

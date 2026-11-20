@@ -68,7 +68,9 @@ func TestCategoryIndexMatchesPatterns(t *testing.T) {
 				t.Errorf("%s: indexed %q, patterns %q", k, fast[k], v)
 			}
 		}
-		if slow["doc/"] != "n.pdf,o.Docx,p.xlsx,q.pptx,r.md,s.epub,t.csv" || slow["image/other"] != "f.bmp,x.unknownimage" || slow["doc/other"] != "s.epub" {
+		if slow["doc/"] != "n.pdf,o.Docx,p.xlsx,q.pptx,r.md,s.epub,t.csv" || slow["image/other"] != "f.bmp,x.unknownimage" || slow["doc/other"] != "s.epub" ||
+			slow["other/"] != "g,u.bin,v.tar.gz,w.文档,y.verylongextensionname" || slow["other/archive"] != "v.tar.gz" ||
+			slow["other/other"] != "g,u.bin,w.文档,y.verylongextensionname" {
 			t.Errorf("unexpected results: %v", slow)
 		}
 		var nulls int

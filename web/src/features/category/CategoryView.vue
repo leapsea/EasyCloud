@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMediaQuery } from '@vueuse/core'
-import { Download, ExternalLink, FolderOpen, Info, LayoutGrid, List, LoaderCircle } from 'lucide-vue-next'
+import { ChevronRight, Download, ExternalLink, FolderOpen, Info, LayoutGrid, List, LoaderCircle, Puzzle } from 'lucide-vue-next'
+import { useAuth } from '@/stores/auth'
 import { ContextMenuContent, ContextMenuItem, ContextMenuPortal, ContextMenuRoot, ContextMenuSeparator, ContextMenuTrigger } from 'reka-ui'
 import PageHeader from '@/components/PageHeader.vue'
 import FileIcon from '@/components/FileIcon.vue'
@@ -26,8 +27,16 @@ const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
 const plugins = usePlugins()
+const auth = useAuth()
 
-type Kind = 'image' | 'video' | 'audio' | 'doc'
+// Videos without a same-name cover picture need the FFmpeg plugin for a
+// thumbnail; the server says whether one can render frames.
+const videoFrames = ref(true)
+function installCoverPlugin() {
+  router.push({ path: '/admin/plugins', query: { highlight: 'ffmpeg-thumbnail' } })
+}
+
+type Kind = 'image' | 'video' | 'audio' | 'doc' | 'other'
 const kind = computed(() => route.params.kind as Kind)
 
 const SORTS = [
@@ -38,7 +47,7 @@ const SORTS = [
   { key: 'size-desc', sort: 'size', order: 'desc', label: 'category.sort.largest' },
   { key: 'size-asc', sort: 'size', order: 'asc', label: 'category.sort.smallest' },
 ] as const
-const sortKey = ref<(typeof SORTS)[number]['key']>('mtime-desc')
+const sortKey = ref<(typeof SORTS)[number]['key']>(kind.value === 'other' ? 'size-desc' : 'mtime-desc')
 
 // Type filter tags per kind (keys match the server's Category.Types; ""
 // is all, "other" is everything outside the listed types).
@@ -46,15 +55,17 @@ const TYPES: Record<Kind, { key: string; label: string }[]> = {
   image: [{ key: 'jpg', label: 'JPG' }, { key: 'png', label: 'PNG' }, { key: 'gif', label: 'GIF' }, { key: 'webp', label: 'WebP' }, { key: 'heic', label: 'HEIC' }, { key: 'raw', label: 'RAW' }],
   video: [{ key: 'mp4', label: 'MP4' }, { key: 'mkv', label: 'MKV' }, { key: 'mov', label: 'MOV' }, { key: 'avi', label: 'AVI' }, { key: 'ts', label: 'TS' }],
   audio: [{ key: 'mp3', label: 'MP3' }, { key: 'flac', label: 'FLAC' }, { key: 'wav', label: 'WAV' }, { key: 'aac', label: 'AAC' }, { key: 'ape', label: 'APE' }],
+  other: [{ key: 'image', label: 'category.type.diskImage' }, { key: 'archive', label: 'category.type.archive' }, { key: 'installer', label: 'category.type.installer' }],
   doc: [{ key: 'pdf', label: 'PDF' }, { key: 'txt', label: 'TXT' }, { key: 'word', label: 'Word' }, { key: 'excel', label: 'Excel' }, { key: 'ppt', label: 'PPT' }],
 }
 const typeKey = ref('')
 const typeTags = computed(() => [
   { key: '', label: t('category.type.all') },
-  ...(TYPES[kind.value] ?? []),
+  ...(TYPES[kind.value] ?? []).map((x) => ({ key: x.key, label: x.label.startsWith('category.') ? t(x.label) : x.label })),
   { key: 'other', label: t('category.type.other') },
 ])
-watch(kind, () => { typeKey.value = '' })
+// "Other" (disk images, archives, ...) is about big files: largest first.
+watch(kind, (k) => { typeKey.value = ''; sortKey.value = k === 'other' ? 'size-desc' : 'mtime-desc' })
 
 // View per kind: pictures and videos default to the gallery, the rest to a list.
 const VIEW_KEY = 'ec.category.view'
@@ -92,6 +103,7 @@ async function load(reset = false) {
     if (my !== seq) return
     items.value = [...items.value, ...r.items]
     total.value = r.total
+    if (r.videoFrames !== undefined) videoFrames.value = r.videoFrames
     done.value = items.value.length >= r.total || r.items.length < PAGE
   } catch (e) {
     if (my === seq) { toast.error(e); done.value = true }
@@ -177,6 +189,17 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=128&path=${encodeURICo
         </div>
       </template>
     </PageHeader>
+
+    <component
+      :is="auth.user?.isAdmin ? 'button' : 'div'" v-if="kind === 'video' && !videoFrames"
+      class="mb-2 flex w-full items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-left text-[13px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+      :class="auth.user?.isAdmin ? 'hover:bg-amber-100 dark:hover:bg-amber-500/15' : ''"
+      @click="auth.user?.isAdmin && installCoverPlugin()"
+    >
+      <Puzzle class="h-4 w-4 shrink-0" />
+      <span class="min-w-0 flex-1">{{ $t('category.coverPlugin') }} {{ auth.user?.isAdmin ? $t('category.coverPluginAdmin') : $t('category.coverPluginUser') }}</span>
+      <ChevronRight v-if="auth.user?.isAdmin" class="h-4 w-4 shrink-0" />
+    </component>
 
     <!-- Narrow screens: the tags get their own scrollable row. -->
     <div class="-mt-1 mb-2 flex gap-1.5 overflow-x-auto md:hidden" role="radiogroup" :aria-label="$t('category.type.label')">

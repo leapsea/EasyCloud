@@ -2,7 +2,7 @@
 import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { BadgeCheck, ShieldAlert, Upload } from 'lucide-vue-next'
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { pluginsApi, type InstalledPlugin, type RepoPlugin } from '@/api/plugins'
 import { useToast } from '@/stores/toast'
@@ -29,8 +29,20 @@ async function loadRepo() {
   repoErr.value = ''
   try { repo.value = (await pluginsApi.repository()).items } catch (e: any) { repoErr.value = e?.detail ?? e?.message ?? t('errors.PLUGIN_REPOSITORY_UNAVAILABLE'); repo.value = [] }
 }
+// ?highlight=<plugin id> (e.g. from the video category's hint): show that
+// plugin, in the installed list if present (to enable it), else the repository.
+const highlight = ref(typeof route.query.highlight === 'string' ? route.query.highlight : '')
+async function showHighlight() {
+  await nextTick()
+  document.getElementById(`plugin-${highlight.value}`)?.scrollIntoView({ block: 'center' })
+}
 onMounted(async () => {
   await load()
+  if (highlight.value) {
+    if (!items.value.some((p) => p.manifest.id === highlight.value)) { tab.value = 'repo'; await loadRepo() }
+    await showHighlight()
+    return
+  }
   const want = items.value.find((p) => p.manifest.type === 'connector' && (!p.config.documentServerUrl))
   if (route.query.focus === undefined && want) startConfig(want)
 })
@@ -94,7 +106,7 @@ async function remove() {
 
     <div v-if="tab === 'installed'" class="grid min-h-0 flex-1 content-start gap-3 overflow-auto md:grid-cols-2">
       <p v-if="!items.length" class="card muted p-10 text-center text-sm md:col-span-2">{{ $t('plugins.none') }}</p>
-      <div v-for="p in items" :key="p.manifest.id" class="card flex flex-col p-4">
+      <div v-for="p in items" :id="`plugin-${p.manifest.id}`" :key="p.manifest.id" class="card flex flex-col p-4" :class="highlight === p.manifest.id ? 'ring-2 ring-brand-500' : ''">
         <div class="flex items-start gap-2">
           <div class="min-w-0 flex-1">
             <p class="font-medium">{{ p.manifest.name }} <span class="muted text-xs">v{{ p.manifest.version }}</span></p>
@@ -122,7 +134,7 @@ async function remove() {
       <p class="muted border-b border-[var(--border)] px-4 py-2 text-xs break-all">{{ $t('plugins.repo', { url: repoUrl || $t('plugins.repoUnset') }) }}</p>
       <p v-if="repoErr" class="p-6 text-sm text-red-600">{{ repoErr }}</p>
       <p v-else-if="repo === null" class="muted p-6 text-sm">{{ $t('common.loading') }}</p>
-      <div v-for="r in repo ?? []" :key="r.id" class="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3 text-sm last:border-0">
+      <div v-for="r in repo ?? []" :id="`plugin-${r.id}`" :key="r.id" class="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3 text-sm last:border-0" :class="highlight === r.id ? 'bg-brand-50 ring-2 ring-inset ring-brand-500' : ''">
         <div class="min-w-0 flex-1">
           <p class="font-medium">{{ r.name }} <span class="muted text-xs">{{ r.latest ? 'v' + r.latest : $t('plugins.incompatible') }}</span></p>
           <p class="muted text-xs">{{ r.description }}</p>

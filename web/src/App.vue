@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ThemeToggle from '@/components/ThemeToggle.vue'
-import { Building2, FileText, Film, Image as ImageIcon, Music, HardDrive, LogOut, PanelLeftClose, PanelLeftOpen, CircleUserRound, Cloud, FolderOpen, Globe, LayoutDashboard, Puzzle, ScrollText, Settings, Share2, ShieldCheck, Trash2, Users } from 'lucide-vue-next'
+import { Building2, FileText, Package, Film, Image as ImageIcon, Music, HardDrive, LogOut, PanelLeftClose, PanelLeftOpen, CircleUserRound, Cloud, FolderOpen, Globe, LayoutDashboard, Puzzle, ScrollText, Settings, Share2, ShieldCheck, Trash2, Users } from 'lucide-vue-next'
 import { computed, provide, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
@@ -42,6 +42,7 @@ const categoryNav = [
   { to: '/category/video', label: 'nav.cat.video', icon: Film },
   { to: '/category/audio', label: 'nav.cat.audio', icon: Music },
   { to: '/category/doc', label: 'nav.cat.doc', icon: FileText },
+  { to: '/category/other', label: 'nav.cat.other', icon: Package },
 ]
 const adminNav = [
   { to: '/admin/dashboard', label: 'nav.dashboard', icon: LayoutDashboard },
