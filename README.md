@@ -68,6 +68,8 @@ scripts/build-plugins.sh    # 构建并签名 plugins/ 下的插件，生成仓�
 | `EASYCLOUD_DB_HOST/PORT/USER/PASSWORD/NAME` | — | 配置 HOST 即启用 MariaDB 10.11+ |
 | `EASYCLOUD_DB_DRIVER` | 自动 | `sqlite` 或 `mariadb` |
 | `EASYCLOUD_DB_CONNECT_TIMEOUT` | `60` | 启动时连接重试的总秒数 |
+| `EASYCLOUD_DB_LOG` | `slow` | 数据库查询日志：`slow` 记录慢查询（WARN），`all` 记录每条语句（INFO），`off` 关闭；只记 SQL 文本、耗时、行数和调用函数，不记参数 |
+| `EASYCLOUD_DB_SLOW_MS` | `300` | 慢查询阈值（毫秒），耗时含读取全部结果 |
 | `EASYCLOUD_UPLOAD_MAX_FILE_SIZE` | `0`（不限） | 单文件上限，字节（可在仪表盘覆盖） |
 | `EASYCLOUD_UPLOAD_CHUNK_SIZE` | `16777216` | 分片大小；反向代理限制请求体时调小（可覆盖） |
 | `EASYCLOUD_TRASH_RETENTION_DAYS` | `30` | 回收站保留天数（可覆盖） |

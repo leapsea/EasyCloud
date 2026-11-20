@@ -40,6 +40,22 @@ const SORTS = [
 ] as const
 const sortKey = ref<(typeof SORTS)[number]['key']>('mtime-desc')
 
+// Type filter tags per kind (keys match the server's Category.Types; ""
+// is all, "other" is everything outside the listed types).
+const TYPES: Record<Kind, { key: string; label: string }[]> = {
+  image: [{ key: 'jpg', label: 'JPG' }, { key: 'png', label: 'PNG' }, { key: 'gif', label: 'GIF' }, { key: 'webp', label: 'WebP' }, { key: 'heic', label: 'HEIC' }, { key: 'raw', label: 'RAW' }],
+  video: [{ key: 'mp4', label: 'MP4' }, { key: 'mkv', label: 'MKV' }, { key: 'mov', label: 'MOV' }, { key: 'avi', label: 'AVI' }, { key: 'ts', label: 'TS' }],
+  audio: [{ key: 'mp3', label: 'MP3' }, { key: 'flac', label: 'FLAC' }, { key: 'wav', label: 'WAV' }, { key: 'aac', label: 'AAC' }, { key: 'ape', label: 'APE' }],
+  doc: [{ key: 'pdf', label: 'PDF' }, { key: 'txt', label: 'TXT' }, { key: 'word', label: 'Word' }, { key: 'excel', label: 'Excel' }, { key: 'ppt', label: 'PPT' }],
+}
+const typeKey = ref('')
+const typeTags = computed(() => [
+  { key: '', label: t('category.type.all') },
+  ...(TYPES[kind.value] ?? []),
+  { key: 'other', label: t('category.type.other') },
+])
+watch(kind, () => { typeKey.value = '' })
+
 // View per kind: pictures and videos default to the gallery, the rest to a list.
 const VIEW_KEY = 'ec.category.view'
 function readViews(): Record<string, 'grid' | 'list'> {
@@ -72,7 +88,7 @@ async function load(reset = false) {
   loading.value = true
   const s = SORTS.find((x) => x.key === sortKey.value)!
   try {
-    const r = await filesApi.category(kind.value, { sort: s.sort, order: s.order, offset: items.value.length, limit: PAGE })
+    const r = await filesApi.category(kind.value, { type: typeKey.value, sort: s.sort, order: s.order, offset: items.value.length, limit: PAGE })
     if (my !== seq) return
     items.value = [...items.value, ...r.items]
     total.value = r.total
@@ -83,7 +99,7 @@ async function load(reset = false) {
     if (my === seq) loading.value = false
   }
 }
-watch([kind, sortKey], () => load(true), { immediate: true })
+watch([kind, typeKey, sortKey], () => load(true), { immediate: true })
 
 // List view: load the next page when the end of the list scrolls into view.
 const sentinel = ref<HTMLElement>()
@@ -144,6 +160,14 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=128&path=${encodeURICo
   <section class="flex h-full flex-col">
     <PageHeader :title="$t(`nav.cat.${kind}`)" :subtitle="total ? $t('category.count', { n: total.toLocaleString() }) : ''">
       <template #actions>
+        <div class="hidden h-8 shrink-0 items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5 md:flex" role="radiogroup" :aria-label="$t('category.type.label')">
+          <button
+            v-for="tg in typeTags" :key="tg.key" role="radio" :aria-checked="typeKey === tg.key"
+            class="flex h-full items-center whitespace-nowrap rounded-md px-2.5 text-[13px]"
+            :class="typeKey === tg.key ? 'bg-[var(--surface-sunken)] font-medium text-brand-600' : 'text-[var(--text-muted)] hover:text-[var(--text)]'"
+            @click="typeKey = tg.key"
+          >{{ tg.label }}</button>
+        </div>
         <select v-model="sortKey" class="input input-sm !w-auto" :aria-label="$t('category.sortLabel')">
           <option v-for="s in SORTS" :key="s.key" :value="s.key">{{ $t(s.label) }}</option>
         </select>
@@ -154,6 +178,16 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=128&path=${encodeURICo
       </template>
     </PageHeader>
 
+    <!-- Narrow screens: the tags get their own scrollable row. -->
+    <div class="-mt-1 mb-2 flex gap-1.5 overflow-x-auto md:hidden" role="radiogroup" :aria-label="$t('category.type.label')">
+      <button
+        v-for="tg in typeTags" :key="tg.key" role="radio" :aria-checked="typeKey === tg.key"
+        class="h-7 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs"
+        :class="typeKey === tg.key ? 'border-brand-500 bg-brand-50 font-medium text-brand-600' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'"
+        @click="typeKey = tg.key"
+      >{{ tg.label }}</button>
+    </div>
+
     <div class="flex min-h-0 flex-1 gap-3">
       <div class="card relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ContextMenuRoot>
@@ -161,7 +195,7 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=128&path=${encodeURICo
             <div class="flex min-h-0 flex-1 flex-col" @contextmenu="onContextMenu">
               <div v-if="empty" class="muted flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm">
                 <FolderOpen class="h-10 w-10 opacity-40" :stroke-width="1.25" />
-                <p>{{ $t(`category.empty.${kind}`) }}</p>
+                <p>{{ typeKey ? $t('category.empty.filtered') : $t(`category.empty.${kind}`) }}</p>
                 <p class="text-xs">{{ $t('category.indexHint') }}</p>
               </div>
               <GalleryView

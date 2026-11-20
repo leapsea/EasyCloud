@@ -135,6 +135,7 @@ export default {
     "empty": {
       "audio": "No audio found",
       "doc": "No documents found",
+      "filtered": "No files of this type",
       "image": "No pictures found",
       "video": "No videos found"
     },
@@ -147,7 +148,12 @@ export default {
       "oldest": "Oldest",
       "smallest": "Smallest"
     },
-    "sortLabel": "Sort"
+    "sortLabel": "Sort",
+    "type": {
+      "all": "All",
+      "label": "File type",
+      "other": "Other"
+    }
   },
   "common": {
     "back": "Back",

@@ -135,6 +135,7 @@ export default {
     "empty": {
       "audio": "没有找到音频",
       "doc": "没有找到文档",
+      "filtered": "没有该类型的文件",
       "image": "没有找到图片",
       "video": "没有找到视频"
     },
@@ -147,7 +148,12 @@ export default {
       "oldest": "最早修改",
       "smallest": "最小"
     },
-    "sortLabel": "排序"
+    "sortLabel": "排序",
+    "type": {
+      "all": "全部",
+      "label": "文件类型",
+      "other": "其他"
+    }
   },
   "common": {
     "back": "返回",

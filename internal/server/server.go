@@ -138,6 +138,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 	files.AddObserver(ids)
 	files.SetProtector(protector{ids: ids})
 	idxStore := index.NewStore(db)
+	go idxStore.Backfill(ctx, log)
 	files.SetQuota(quota{ids: ids, store: idxStore})
 	upload, err := transfer.NewService(dataRoot, files, set, rec, log)
 	if err != nil {

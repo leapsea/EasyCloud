@@ -27,8 +27,8 @@ export const filesApi = {
   usage: (path: string) => request<{ bytes: number; files: number }>('GET', `/api/files/usage?${qs({ path })}`),
   // Player: whether a video is streamed with a playback fix (see internal/media/mp4fix).
   playback: (path: string) => request<{ fixed: boolean; reasons: string[] }>('GET', `/api/files/playback?${qs({ path })}`),
-  category: (kind: string, o: { sort?: string; order?: string; offset?: number; limit?: number }) =>
-    request<{ items: FileEntry[]; total: number }>('GET', `/api/files/category?${qs({ kind, sort: o.sort ?? 'mtime', order: o.order ?? 'desc', offset: String(o.offset ?? 0), limit: String(o.limit ?? 100) })}`),
+  category: (kind: string, o: { type?: string; sort?: string; order?: string; offset?: number; limit?: number }) =>
+    request<{ items: FileEntry[]; total: number }>('GET', `/api/files/category?${qs({ kind, ...(o.type ? { type: o.type } : {}), sort: o.sort ?? 'mtime', order: o.order ?? 'desc', offset: String(o.offset ?? 0), limit: String(o.limit ?? 100) })}`),
   details: (path: string) => request<FileDetails>('GET', `/api/files/details?${qs({ path })}`),
   streamUrl: (path: string) => `/api/files/stream?${qs({ path })}`,
   downloadUrl: (path: string, inline = false) =>

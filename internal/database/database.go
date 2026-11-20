@@ -21,7 +21,7 @@ import (
 	"github.com/easycloud/easycloud/migrations"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pressly/goose/v3"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 var (
@@ -54,23 +54,24 @@ const versionTable = "easycloud_goose_version"
 
 func Open(ctx context.Context, cfg config.Database, appData string, log *slog.Logger) (*DB, error) {
 	if cfg.Driver == "mariadb" {
-		return openMySQL(ctx, cfg, appData, log)
+		return openMySQL(ctx, cfg, appData, newQueryLog(cfg.Log, cfg.SlowMS, log), log)
 	}
-	return openSQLite(ctx, appData, log)
+	return openSQLite(ctx, appData, newQueryLog(cfg.Log, cfg.SlowMS, log), log)
 }
 
 func SQLitePath(appData string) string { return filepath.Join(appData, "easycloud.db") }
 
-func openSQLite(ctx context.Context, appData string, log *slog.Logger) (*DB, error) {
+func openSQLite(ctx context.Context, appData string, ql *queryLog, log *slog.Logger) (*DB, error) {
 	if err := os.MkdirAll(appData, 0o750); err != nil {
 		return nil, fmt.Errorf("%w: create %s: %v", ErrConfig, appData, err)
 	}
 	path := SQLitePath(appData)
 	base := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
-	w, err := sql.Open("sqlite", base+"&_txlock=immediate")
+	wc, err := connectorOf(&sqlite.Driver{}, base+"&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
+	w := ql.open(wc, "w")
 	w.SetMaxOpenConns(1)
 	if err := w.PingContext(ctx); err != nil {
 		w.Close()
@@ -81,16 +82,17 @@ func openSQLite(ctx context.Context, appData string, log *slog.Logger) (*DB, err
 		w.Close()
 		return nil, fmt.Errorf("%w: %s is not a healthy SQLite file (refusing to touch it)", ErrConfig, path)
 	}
-	r, err := sql.Open("sqlite", base+"&_pragma=query_only(1)")
+	rc, err := connectorOf(&sqlite.Driver{}, base+"&_pragma=query_only(1)")
 	if err != nil {
 		w.Close()
 		return nil, err
 	}
+	r := ql.open(rc, "r")
 	r.SetMaxOpenConns(8)
 	return &DB{W: w, R: r, Dialect: SQLite, appData: appData, cfg: config.Database{Driver: "sqlite"}, log: log}, nil
 }
 
-func openMySQL(ctx context.Context, cfg config.Database, appData string, log *slog.Logger) (*DB, error) {
+func openMySQL(ctx context.Context, cfg config.Database, appData string, ql *queryLog, log *slog.Logger) (*DB, error) {
 	mc := mysql.NewConfig()
 	mc.User, mc.Passwd, mc.Net = cfg.User, cfg.Password, "tcp"
 	mc.Addr = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
@@ -102,7 +104,7 @@ func openMySQL(ctx context.Context, cfg config.Database, appData string, log *sl
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrConfig, err)
 	}
-	db := sql.OpenDB(connector)
+	db := ql.open(connector, "rw")
 	db.SetMaxOpenConns(16)
 	db.SetConnMaxLifetime(30 * time.Minute)
 

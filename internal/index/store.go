@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/easycloud/easycloud/internal/database"
@@ -39,7 +40,12 @@ func parentOf(p string) string {
 	return "."
 }
 
-type Store struct{ db *database.DB }
+type Store struct {
+	db *database.DB
+	// catReady: every row has its category column filled (see Backfill), so
+	// the category views can use the index.
+	catReady atomic.Bool
+}
 
 func NewStore(db *database.DB) *Store { return &Store{db: db} }
 
@@ -89,7 +95,7 @@ func (s *Store) Upsert(ctx context.Context, nodes []Node) error {
 		return nil
 	}
 	q := s.db.Upsert("easycloud_files",
-		[]string{"path_hash", "path", "parent_hash", "name", "is_dir", "size", "mtime", "dev", "inode", "mime", "width", "height"},
+		[]string{"path_hash", "path", "parent_hash", "name", "is_dir", "size", "mtime", "dev", "inode", "mime", "width", "height", "category", "ext"},
 		[]string{"path_hash"})
 	tx, err := s.db.W.BeginTx(ctx, nil)
 	if err != nil {
@@ -102,8 +108,9 @@ func (s *Store) Upsert(ctx context.Context, nodes []Node) error {
 	}
 	defer stmt.Close()
 	for _, n := range nodes {
+		cat, ext := classify(n.Name, n.Mime, n.IsDir)
 		if _, err := stmt.ExecContext(ctx, hashPath(n.Path), n.Path, hashPath(parentOf(n.Path)), n.Name, n.IsDir, n.Size,
-			n.MTime.Unix(), n.Dev, n.Inode, n.Mime, n.Width, n.Height); err != nil {
+			n.MTime.Unix(), n.Dev, n.Inode, n.Mime, n.Width, n.Height, cat, ext); err != nil {
 			return err
 		}
 	}

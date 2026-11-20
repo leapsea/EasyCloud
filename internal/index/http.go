@@ -81,7 +81,7 @@ func Mount(r chi.Router, store *Store, guard pathguard.Authorizer, log *slog.Log
 }
 
 // MountCategories registers GET /files/category?kind=image|video|audio|doc
-// [&sort=mtime|name|size&order=asc|desc&offset=&limit=]: the files of a kind
+// [&type=<Category.Types key>|other][&sort=mtime|name|size&order=asc|desc&offset=&limit=]: the files of a kind
 // across everything the user may read. thumbable tells whether the thumbnail
 // service can render a file.
 func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thumbable func(name string) bool, log *slog.Logger) {
@@ -90,6 +90,10 @@ func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thu
 		cat, ok := Categories[q.Get("kind")]
 		if !ok {
 			return errs.ErrInvalidInput.WithDetail("kind must be image, video, audio or doc")
+		}
+		typ := q.Get("type")
+		if !cat.HasType(typ) {
+			return errs.ErrInvalidInput.WithDetail("unknown type for this kind")
 		}
 		offset, _ := strconv.Atoi(q.Get("offset"))
 		limit, _ := strconv.Atoi(q.Get("limit"))
@@ -107,7 +111,7 @@ func MountCategories(r chi.Router, store *Store, guard pathguard.Authorizer, thu
 		for i, r := range roots {
 			scope[i] = r.String()
 		}
-		nodes, total, err := store.ByCategory(req.Context(), cat, scope, q.Get("sort"), q.Get("order") == "asc", offset, limit)
+		nodes, total, err := store.ByCategory(req.Context(), cat, typ, scope, q.Get("sort"), q.Get("order") == "asc", offset, limit)
 		if err != nil {
 			return err
 		}

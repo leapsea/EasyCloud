@@ -22,6 +22,10 @@ type Database struct {
 	Password       string `koanf:"password"`
 	Name           string `koanf:"name"`
 	ConnectTimeout int    `koanf:"connect_timeout"` // seconds
+	// Log is the query log: "slow" (default, statements over SlowMS), "all"
+	// (every statement) or "off". SQL text only, never arguments.
+	Log    string `koanf:"log"`
+	SlowMS int    `koanf:"slow_ms"`
 }
 
 // Redacted returns a log-safe target description.
@@ -80,6 +84,8 @@ func Load(yamlPath string) (*Config, error) {
 		"database.name":                 "easycloud",
 		"database.user":                 "easycloud",
 		"database.connect_timeout":      60,
+		"database.log":                  "slow",
+		"database.slow_ms":              300,
 		"upload.max_file_size":          0,
 		"upload.chunk_size":             16 << 20,
 		"trash.retention_days":          30,
