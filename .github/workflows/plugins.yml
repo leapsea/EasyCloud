@@ -44,7 +44,11 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
           echo "name=$(jq -r .name "$m")" >> "$GITHUB_OUTPUT"
       - name: Test the plugin
-        run: go vet ./plugins/${{ steps.tag.outputs.id }}/... && go test ./plugins/${{ steps.tag.outputs.id }}/...
+        run: |
+          dir=plugins/${{ steps.tag.outputs.id }}
+          # Connector/viewer plugins ship no Go code; "go vet" exits 1 on an empty pattern.
+          if [ -z "$(find "$dir" -name '*.go' -print -quit)" ]; then echo "no Go code in $dir, skipping"; exit 0; fi
+          go vet ./$dir/... && go test ./$dir/...
       - name: Build and sign
         env: { SIGNING_KEY: "${{ secrets.PLUGIN_SIGNING_KEY }}" }
         run: |
