@@ -60,11 +60,11 @@ async function onFile(ev: Event) {
   ;(ev.target as HTMLInputElement).value = ''
   if (!f) return
   busy.value = 'upload'
-  try { const p = await pluginsApi.upload(f); toast.success(t('plugins.installed', { name: p.manifest.name, version: p.manifest.version })); await load() } catch (e) { toast.error(e) } finally { busy.value = null }
+  try { const p = await pluginsApi.upload(f); toast.success(t('toast.pluginInstalled'), t('toast.pluginInstalledD', { name: p.manifest.name, version: p.manifest.version })); await load() } catch (e) { toast.error(e) } finally { busy.value = null }
 }
 async function installRepo(r: RepoPlugin) {
   busy.value = r.id
-  try { const p = await pluginsApi.installFromRepo(r.id); toast.success(t('plugins.installed', { name: p.manifest.name, version: p.manifest.version })); await load(); await loadRepo() } catch (e) { toast.error(e) } finally { busy.value = null }
+  try { const p = await pluginsApi.installFromRepo(r.id); toast.success(t('toast.pluginInstalled'), t('toast.pluginInstalledD', { name: p.manifest.name, version: p.manifest.version })); await load(); await loadRepo() } catch (e) { toast.error(e) } finally { busy.value = null }
 }
 
 const cfgOpen = ref(false)
@@ -82,12 +82,12 @@ async function saveConfig() {
     const v = cfgValues.value[f.key]
     out[f.key] = f.type === 'number' ? Number(v) : v
   }
-  try { await pluginsApi.update(p.manifest.id, { config: out }); toast.success(t('plugins.configSaved')); cfgOpen.value = false; load() } catch (e) { toast.error(e) }
+  try { await pluginsApi.update(p.manifest.id, { config: out }); toast.success(t('toast.pluginConfigSaved'), t('toast.pluginConfigSavedD')); cfgOpen.value = false; load() } catch (e) { toast.error(e) }
 }
 const delTarget = ref<InstalledPlugin | null>(null)
 async function remove() {
   const p = delTarget.value!
-  try { await pluginsApi.remove(p.manifest.id); toast.success(t('plugins.removed')); delTarget.value = null; load() } catch (e) { toast.error(e) }
+  try { await pluginsApi.remove(p.manifest.id); toast.success(t('toast.pluginRemoved')); delTarget.value = null; load() } catch (e) { toast.error(e) }
 }
 </script>
 

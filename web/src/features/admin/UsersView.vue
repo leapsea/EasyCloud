@@ -58,7 +58,7 @@ async function create() {
   try {
     const f = form.value
     await adminApi.createUser({ username: f.username, displayName: f.displayName, password: f.password, role: f.role, quotaBytes: Math.round(f.quotaGB * 1024 ** 3), groupIds: f.groupIds })
-    toast.success(t('users.created', { name: f.username }))
+    toast.success(t('toast.userCreated'), t('toast.userCreatedD', { name: f.username }))
     createOpen.value = false
     load()
   } catch (e) { toast.error(e) }
@@ -77,7 +77,7 @@ async function saveEdit() {
   const u = editing.value!
   try {
     await adminApi.updateUser(u.id, { displayName: edit.value.displayName, role: edit.value.role, disabled: edit.value.disabled, quotaBytes: Math.round(edit.value.quotaGB * 1024 ** 3), groupIds: edit.value.groupIds })
-    toast.success(t('common.saved'))
+    toast.success(t('toast.saved'), t('toast.userSavedD'))
     editOpen.value = false
     load()
   } catch (e) { toast.error(e) }
@@ -86,17 +86,17 @@ async function saveEdit() {
 // Password / delete
 const pwOpen = ref(false), pwValue = ref('')
 async function resetPw() {
-  try { await adminApi.resetPassword(editing.value!.id, pwValue.value); toast.success(t('users.pwReset')); pwOpen.value = false } catch (e) { toast.error(e) }
+  try { await adminApi.resetPassword(editing.value!.id, pwValue.value); toast.success(t('toast.userPwReset'), t('toast.userPwResetD')); pwOpen.value = false } catch (e) { toast.error(e) }
 }
 // Removes the user's authenticator (lost phone); they can bind a new one.
 async function resetTwoFactor() {
   const u = editing.value!
   if (!confirm(t('users.resetTwoFactorConfirm', { name: u.username }))) return
-  try { await adminApi.resetTwoFactor(u.id); toast.success(t('users.twoFactorReset')); u.twoFactor = false; load() } catch (e) { toast.error(e) }
+  try { await adminApi.resetTwoFactor(u.id); toast.success(t('toast.user2faReset'), t('toast.user2faResetD')); u.twoFactor = false; load() } catch (e) { toast.error(e) }
 }
 const delOpen = ref(false)
 async function del() {
-  try { await adminApi.deleteUser(editing.value!.id); toast.success(t('users.deleted')); delOpen.value = false; editOpen.value = false; load() } catch (e) { toast.error(e) }
+  try { await adminApi.deleteUser(editing.value!.id); toast.success(t('toast.userDeleted'), t('toast.userDeletedD')); delOpen.value = false; editOpen.value = false; load() } catch (e) { toast.error(e) }
 }
 function genPassword() {
   const a = new Uint8Array(12); crypto.getRandomValues(a)

@@ -24,10 +24,10 @@ function state(s: Share) {
   return 'active'
 }
 async function copy(s: Share) {
-  try { await navigator.clipboard.writeText(`${location.origin}/s/${s.id}`); toast.success(t('shares.copied')) } catch { /* ignore */ }
+  try { await navigator.clipboard.writeText(`${location.origin}/s/${s.id}`); toast.success(t('toast.shareLinkCopied'), t('toast.shareLinkCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 async function revoke(s: Share) {
-  try { await shareApi.remove(s.id); toast.success(t('shares.revoked')); load() } catch (e) { toast.error(e) }
+  try { await shareApi.remove(s.id); toast.success(t('toast.shareRevoked'), t('toast.shareRevokedD')); load() } catch (e) { toast.error(e) }
 }
 </script>
 

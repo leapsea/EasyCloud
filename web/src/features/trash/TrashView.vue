@@ -24,18 +24,18 @@ onMounted(load)
 async function restore(i: TrashItem) {
   try {
     const { path } = await trashApi.restore(i.id, 'rename')
-    toast.success(t('trash.restored', { path }))
+    toast.success(t('toast.trashRestored'), path)
     items.value = items.value.filter((x) => x.id !== i.id)
   } catch (e) { toast.error(e) }
 }
 async function purge() {
   const i = purgeTarget.value
   if (!i) return
-  try { await trashApi.purge(i.id); items.value = items.value.filter((x) => x.id !== i.id); toast.success(t('trash.purged')) } catch (e) { toast.error(e) }
+  try { await trashApi.purge(i.id); items.value = items.value.filter((x) => x.id !== i.id); toast.success(t('toast.trashPurged'), t('toast.trashPurgedD')) } catch (e) { toast.error(e) }
   purgeTarget.value = null
 }
 async function empty() {
-  try { const { purged } = await trashApi.empty(); toast.success(t('trash.emptied', { n: purged })); items.value = [] } catch (e) { toast.error(e) }
+  try { const { purged } = await trashApi.empty(); toast.success(t('toast.trashEmptied'), t('toast.trashEmptiedD', { n: purged })); items.value = [] } catch (e) { toast.error(e) }
   emptyOpen.value = false
 }
 function daysLeft(i: TrashItem) { return Math.max(0, Math.ceil((+new Date(i.expireAt) - Date.now()) / 86_400_000)) }

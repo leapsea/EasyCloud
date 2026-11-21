@@ -55,7 +55,7 @@ async function create() {
 }
 const renameValue = ref('')
 async function save(patch: { name?: string; parentId?: string; memberIds?: string[] }) {
-  try { await adminApi.updateGroup(selectedId.value!, patch); toast.success(t('common.saved')); load() } catch (e) { toast.error(e) }
+  try { await adminApi.updateGroup(selectedId.value!, patch); toast.success(t('toast.saved'), t('toast.groupSavedD')); load() } catch (e) { toast.error(e) }
 }
 function toggleMember(uid: string) {
   const m = new Set(selected.value!.memberIds)
@@ -64,7 +64,7 @@ function toggleMember(uid: string) {
 }
 const delOpen = ref(false)
 async function del() {
-  try { await adminApi.deleteGroup(selectedId.value!); delOpen.value = false; selectedId.value = null; toast.success(t('groups.deleted')); load() } catch (e) { toast.error(e) }
+  try { await adminApi.deleteGroup(selectedId.value!); delOpen.value = false; selectedId.value = null; toast.success(t('toast.groupDeleted'), t('toast.groupDeletedD')); load() } catch (e) { toast.error(e) }
 }
 </script>
 

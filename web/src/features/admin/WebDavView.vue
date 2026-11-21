@@ -20,13 +20,14 @@ async function load() {
 onMounted(load)
 
 async function copy(text: string) {
-  try { await navigator.clipboard.writeText(text); toast.success(t('common.copied')) } catch { toast.push({ kind: 'info', text: t('common.copyManually') }) }
+  try { await navigator.clipboard.writeText(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 async function toggle(c: DavConfig) {
   try {
     const u = await webdavApi.setEnabled(c.id, !c.enabled)
     Object.assign(c, u)
-    toast.success(u.enabled ? t('webdav.enabledToast') : t('webdav.disabledToast'))
+    if (u.enabled) toast.success(t('toast.davEnabled'), t('toast.davEnabledD'))
+    else toast.info(t('toast.davDisabled'), t('toast.davDisabledD'))
   } catch (e) { toast.error(e) }
 }
 
@@ -83,7 +84,7 @@ function addDir() { picker.value = { open: true, index: -1 } }
 function changeDir(i: number) { picker.value = { open: true, index: i } }
 function onPick(path: string) {
   if (picker.value.index >= 0) form.value.dirs[picker.value.index].path = path
-  else if (form.value.dirs.some((d) => d.path === path)) toast.push({ kind: 'info', text: t('webdav.alreadyAdded') })
+  else if (form.value.dirs.some((d) => d.path === path)) toast.info(t('toast.davDirExists'), path)
   else form.value.dirs.push({ path, alias: '', perm: 'rw' })
 }
 
@@ -95,7 +96,7 @@ async function save() {
   try {
     if (editing.value) {
       await webdavApi.update(editing.value.id, body)
-      toast.success(t('common.saved'))
+      toast.success(t('toast.saved'), t('toast.davSavedD'))
     } else {
       const r = await webdavApi.create(body)
       creds.value = { title: t('webdav.createdTitle', { name: r.item.name }), url: davUrl(r.item.slug), username: r.item.username, password: r.password }
@@ -116,7 +117,7 @@ async function resetPassword() {
 }
 const delTarget = ref<DavConfig | null>(null)
 async function remove() {
-  try { await webdavApi.remove(delTarget.value!.id); delTarget.value = null; toast.success(t('webdav.deleted')); load() } catch (e) { toast.error(e) }
+  try { await webdavApi.remove(delTarget.value!.id); delTarget.value = null; toast.success(t('toast.davDeleted')); load() } catch (e) { toast.error(e) }
 }
 </script>
 

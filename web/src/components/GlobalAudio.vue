@@ -21,9 +21,15 @@ function download() {
   a.download = e.name
   a.click()
 }
+// An open menu (e.g. playback speed) takes Escape and outside clicks first:
+// they close the menu, not minimize the player.
+const menuOpen = () => !!document.querySelector('[role="menu"]')
 function onKey(ev: KeyboardEvent) {
-  if (ev.key === 'Escape' && audio.entry && !audio.minimized) { ev.preventDefault(); audio.minimized = true }
+  if (ev.key === 'Escape' && audio.entry && !audio.minimized && !menuOpen()) { ev.preventDefault(); audio.minimized = true }
 }
+let menuAtDown = false
+function markDown() { menuAtDown = menuOpen() }
+function onBackdrop() { if (!menuAtDown) audio.minimized = true }
 onMounted(() => window.addEventListener('keydown', onKey))
 // Unmounted when leaving the signed-in shell (logout): stop for good.
 onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); audio.close() })
@@ -32,7 +38,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); audio.clos
 <template>
   <Teleport to="body">
     <template v-if="audio.entry">
-      <div v-if="!audio.minimized" class="fixed inset-0 z-40 bg-slate-900/40" @click="audio.minimized = true" />
+      <div v-if="!audio.minimized" class="fixed inset-0 z-40 bg-slate-900/40" @pointerdown="markDown" @click="onBackdrop" />
       <div
         role="dialog" :aria-label="audio.entry.name" :aria-modal="!audio.minimized"
         class="fixed z-50 border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"

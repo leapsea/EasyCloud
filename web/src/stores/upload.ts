@@ -157,7 +157,7 @@ export const useUploads = defineStore('uploads', () => {
     chunkSize = Math.min(chunkSize, next)
     if (!proxyHinted) {
       proxyHinted = true
-      useToast().push({ kind: 'info', text: t('upload.proxyShrink', { size: formatSize(next) }) }, 9000)
+      useToast().push({ kind: 'warn', title: t('toast.proxyShrink'), text: t('toast.proxyShrinkD', { size: formatSize(next) }) }, 9000)
     }
     const file = fileOf.get(item.id)
     if (!file) return false

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from 'lucide-vue-next'
+import { Check, ChevronUp, Pause, Play, RotateCcw, RotateCw, Volume2, VolumeX } from 'lucide-vue-next'
+import { DropdownMenuContent, DropdownMenuPortal, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuRoot, DropdownMenuTrigger } from 'reka-ui'
 import { tint, useTheme } from '@/theme/theme'
 
 // Audio preview: custom controls over a live spectrum. The spectrum taps the
@@ -24,7 +25,7 @@ const volume = ref(1)
 const muted = ref(false)
 const rate = ref(1)
 const error = ref(false)
-const RATES = [0.75, 1, 1.25, 1.5, 2]
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 5]
 
 // Volume, mute and speed are remembered per browser.
 const PREF_KEY = 'ec.audio.prefs'
@@ -43,19 +44,38 @@ watch([volume, muted, rate], () => {
 let ctx: AudioContext | undefined
 let analyser: AnalyserNode | undefined
 let freq: Uint8Array<ArrayBuffer> | undefined
+// Once the element is routed into an AudioContext, it is heard only through
+// it: so the element is connected only after the context is confirmed
+// running. A context the browser keeps suspended (no user gesture) is
+// dropped and the audio plays directly, without spectrum, until the next
+// click on play.
 async function ensureGraph() {
-  if (ctx || !audio.value) { if (ctx?.state === 'suspended') await ctx.resume().catch(() => {}); return }
+  if (!audio.value) return
+  if (ctx) { if (ctx.state === 'suspended') await ctx.resume().catch(() => {}); return }
+  let c: AudioContext | undefined
   try {
-    ctx = new AudioContext()
-    const source = ctx.createMediaElementSource(audio.value)
-    analyser = ctx.createAnalyser()
+    c = new AudioContext()
+    if (c.state !== 'running') await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 300))])
+    if (c.state !== 'running') { c.close().catch(() => {}); return }
+    const source = c.createMediaElementSource(audio.value)
+    analyser = c.createAnalyser()
     analyser.fftSize = 2048
     analyser.smoothingTimeConstant = 0.78
     source.connect(analyser)
-    analyser.connect(ctx.destination)
+    analyser.connect(c.destination)
     freq = new Uint8Array(analyser.frequencyBinCount)
-    if (ctx.state === 'suspended') await ctx.resume()
-  } catch { analyser = undefined } // no spectrum, plain playback
+    ctx = c
+  } catch { analyser = undefined; c?.close().catch(() => {}) } // no spectrum, plain playback
+}
+
+// Opening a track plays it. Browsers may refuse playback with sound that does
+// not follow a click closely enough; then it stays paused on the play button.
+async function autoplay() {
+  const a = audio.value
+  if (!a) return
+  const active = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true
+  if (active) await ensureGraph()
+  a.play().catch(() => { /* refused: the user presses play */ })
 }
 
 async function toggle() {
@@ -67,7 +87,6 @@ async function toggle() {
 const SKIP = 3
 function seekBy(d: number) { const a = audio.value; if (a) a.currentTime = Math.min(Math.max(0, a.currentTime + d), duration.value || a.currentTime + d) }
 function seekTo(e: Event) { const a = audio.value; if (a) a.currentTime = Number((e.target as HTMLInputElement).value) }
-function nextRate() { rate.value = RATES[(RATES.indexOf(rate.value) + 1) % RATES.length] }
 
 // Read the element from the event: the ref is already cleared when the
 // element fires its last events while the player unmounts.
@@ -177,7 +196,7 @@ watch(playing, (p) => {
 watch(() => props.name, () => { if (playing.value) setSession() })
 watch(() => [theme.dark.value, theme.state.accent], kick)
 let ro: ResizeObserver | undefined
-onMounted(() => { ro = new ResizeObserver(kick); if (canvas.value) ro.observe(canvas.value); kick() })
+onMounted(() => { ro = new ResizeObserver(kick); if (canvas.value) ro.observe(canvas.value); kick(); autoplay() })
 onBeforeUnmount(() => {
   if (navigator.mediaSession) {
     navigator.mediaSession.metadata = null
@@ -245,7 +264,26 @@ function onKey(e: KeyboardEvent) {
     <!-- Controls -->
     <div class="mt-3 flex items-center gap-2">
       <div class="flex flex-1 items-center gap-1">
-        <button class="flex h-8 items-center gap-1 rounded-md px-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" :title="t('player.speed')" @click="nextRate">{{ rate }}×</button>
+        <!-- Speed: a menu of choices (above the button: the player sits low on small screens). -->
+        <DropdownMenuRoot :modal="false">
+          <DropdownMenuTrigger
+            class="flex h-8 items-center gap-1 rounded-md px-2 text-xs tabular-nums hover:bg-[var(--surface-muted)] hover:text-[var(--text)] data-[state=open]:bg-[var(--surface-muted)]"
+            :class="rate === 1 ? 'text-[var(--text-muted)]' : 'font-medium text-brand-600'"
+            :title="t('player.speed')" :aria-label="t('player.speed')"
+          >{{ rate === 1 ? t('player.speedShort') : rate + '×' }}<ChevronUp class="h-3 w-3 opacity-60" /></DropdownMenuTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuContent side="top" align="start" :side-offset="6" class="z-[70] min-w-28 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]">
+              <DropdownMenuRadioGroup :model-value="String(rate)" @update:model-value="(v) => (rate = Number(v))">
+                <DropdownMenuRadioItem
+                  v-for="r in [...RATES].reverse()" :key="r" :value="String(r)"
+                  class="flex cursor-default items-center gap-2 rounded-md py-1.5 pl-2 pr-3 text-[13px] tabular-nums outline-none data-[highlighted]:bg-[var(--surface-muted)] data-[state=checked]:font-medium data-[state=checked]:text-brand-600"
+                >
+                  <span class="flex w-3.5 justify-center"><Check v-if="r === rate" class="h-3.5 w-3.5" /></span>{{ r === 1 ? t('player.normal') : r + '×' }}
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenuPortal>
+        </DropdownMenuRoot>
       </div>
       <button class="relative flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" :title="t('player.back', { n: SKIP })" :aria-label="t('player.back', { n: SKIP })" @click="seekBy(-SKIP)">
         <RotateCcw class="h-5 w-5" /><span class="absolute text-[8px] font-semibold">{{ SKIP }}</span>

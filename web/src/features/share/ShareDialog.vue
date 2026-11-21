@@ -31,7 +31,7 @@ async function create() {
 }
 const shareText = computed(() => link.value + (form.value.usePassword ? '\n' + t('shareDialog.codeLine', { code: form.value.password }) : ''))
 async function copy() {
-  try { await navigator.clipboard.writeText(shareText.value); toast.success(t('common.copied')) } catch { toast.push({ kind: 'info', text: t('common.copyManually') }) }
+  try { await navigator.clipboard.writeText(shareText.value); toast.success(t('toast.copied'), t('toast.shareCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 </script>
 

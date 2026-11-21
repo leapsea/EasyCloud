@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import { t as tr } from '@/i18n'
-import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, Ellipsis, ExternalLink, FolderInput, FolderOpen, FolderPlus, Info, LayoutGrid, List, PackageOpen, PencilLine, RotateCw, Search, Share2, Trash2, Upload, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, Ellipsis, ExternalLink, FolderInput, FolderOpen, FolderPlus, Info, LayoutGrid, List, LoaderCircle, PackageOpen, PencilLine, RotateCw, Search, SearchX, Share2, Trash2, Upload, X } from 'lucide-vue-next'
 import {
   ContextMenuContent, ContextMenuItem, ContextMenuPortal, ContextMenuRoot, ContextMenuSeparator, ContextMenuTrigger,
   DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger,
@@ -89,12 +89,19 @@ const searchQ = ref('')
 const searching = ref(false)
 const searchHits = ref<FileEntry[] | null>(null)
 let searchTimer: number | undefined
+let searchSeq = 0
 watch(searchQ, (q) => {
   clearTimeout(searchTimer)
-  if (!q.trim()) { searchHits.value = null; return }
+  const my = ++searchSeq // a slower earlier request must not overwrite newer results
+  if (!q.trim()) { searchHits.value = null; searching.value = false; return }
+  searching.value = true // from the first keystroke: no flash of the unfiltered listing
   searchTimer = window.setTimeout(async () => {
-    searching.value = true
-    try { searchHits.value = (await filesApi.search(q.trim())).items } catch (e) { toast.error(e, auth.user?.isAdmin) } finally { searching.value = false }
+    try {
+      const items = (await filesApi.search(q.trim())).items
+      if (my === searchSeq) searchHits.value = items
+    } catch (e) {
+      if (my === searchSeq) { searchHits.value = []; toast.error(e, auth.user?.isAdmin) }
+    } finally { if (my === searchSeq) searching.value = false }
   }, 250)
 })
 function openHit(h: FileEntry) {
@@ -113,6 +120,8 @@ watch([query, scope], ([q, sc]) => {
   filter.value = sc === 'dir' ? q : ''
   searchQ.value = sc === 'all' ? q : ''
 })
+// Global results replace the listing (below the toolbar) while a query is active.
+const searchMode = computed(() => scope.value === 'all' && !!query.value.trim())
 type SortKey = 'name' | 'size' | 'modTime'
 const sort = ref<{ key: SortKey; asc: boolean }>({ key: 'name', asc: true })
 
@@ -173,13 +182,13 @@ const shareTarget = ref<FileEntry | null>(null)
 const tasks = useTasks()
 const offTask = tasks.onFinished((t) => {
   if (t.status === 'done') toast.success(tr(`tasks.done.${t.kind}`))
-  else if (t.status === 'failed') toast.push({ kind: 'error', text: tr('tasks.failed', { message: t.message ?? '' }) })
+  else if (t.status === 'failed') toast.push({ kind: 'error', title: tr('toast.taskFailed'), text: t.message || undefined })
   scheduleRefresh()
 })
 onBeforeUnmount(offTask)
 const isArchive = (e: FileEntry) => !e.isDir && /\.(zip|tar|tgz|tar\.gz)$/i.test(e.name)
 async function extract(e: FileEntry) {
-  try { await tasks.create('extract', [e.path]); toast.push({ kind: 'info', text: tr('files.extractStarted') }) } catch (err) { toast.error(err, auth.user?.isAdmin) }
+  try { await tasks.create('extract', [e.path]); toast.info(tr('toast.extractStarted'), tr('toast.extractStartedD')) } catch (err) { toast.error(err, auth.user?.isAdmin) }
 }
 function downloadZip() {
   const q = new URLSearchParams()
@@ -264,15 +273,15 @@ const deleteOpen = ref(false)
 const picker = ref<{ open: boolean; mode: 'move' | 'copy' }>({ open: false, mode: 'move' })
 const busy = ref(false)
 
-async function run(fn: () => Promise<unknown>, ok?: string) {
+async function run(fn: () => Promise<unknown>, ok?: string, detail?: string) {
   busy.value = true
-  try { await fn(); if (ok) toast.success(ok); await load(true) } catch (e) { toast.error(e, auth.user?.isAdmin) } finally { busy.value = false }
+  try { await fn(); if (ok) toast.success(ok, detail); await load(true) } catch (e) { toast.error(e, auth.user?.isAdmin) } finally { busy.value = false }
 }
 
 const invalidName = (n: string) => !n.trim() || n.includes('/') || n === '.' || n === '..'
 async function doMkdir() {
   if (invalidName(mkdirName.value)) return
-  await run(() => filesApi.mkdir(joinPath(dir.value, mkdirName.value.trim())), tr('files.created'))
+  await run(() => filesApi.mkdir(joinPath(dir.value, mkdirName.value.trim())), tr('toast.folderCreated'), mkdirName.value.trim())
   mkdirOpen.value = false
 }
 function startRename() {
@@ -290,12 +299,12 @@ function startRename() {
 async function doRename() {
   const e = renameTarget.value
   if (!e || invalidName(renameName.value) || renameName.value === e.name) { renameOpen.value = false; return }
-  await run(() => filesApi.rename(e.path, renameName.value.trim()), tr('files.renamed'))
+  await run(() => filesApi.rename(e.path, renameName.value.trim()), tr('toast.renamed'), `${e.name} → ${renameName.value.trim()}`)
   renameOpen.value = false
 }
 async function doDelete() {
   const paths = selectedEntries.value.map((e) => e.path)
-  await run(() => filesApi.trash(paths), tr('files.trashed', { n: paths.length }))
+  await run(() => filesApi.trash(paths), tr('toast.trashed'), tr('toast.trashedD', { n: paths.length }))
   deleteOpen.value = false
 }
 async function doTransfer(dest: string) {
@@ -307,7 +316,8 @@ async function doTransfer(dest: string) {
     return
   }
   await run(() => (mode === 'move' ? filesApi.move(paths, dest, 'rename') : filesApi.copy(paths, dest, 'rename')),
-    mode === 'move' ? tr('tasks.done.move') : tr('tasks.done.copy'))
+    mode === 'move' ? tr('tasks.done.move') : tr('tasks.done.copy'),
+    tr(mode === 'move' ? 'toast.movedD' : 'toast.copiedToD', { dest }))
 }
 
 // Upload: file input + drag and drop
@@ -325,7 +335,7 @@ function onDragLeave() { if (--dragDepth <= 0) { dragDepth = 0; dragging.value =
 function onDrop(ev: DragEvent) {
   dragDepth = 0
   dragging.value = false
-  if (!canWrite.value) { toast.push({ kind: 'error', text: tr('files.noWrite') }); return }
+  if (!canWrite.value) { toast.warn(tr('toast.noWrite'), tr('toast.noWriteD')); return }
   const files = [...(ev.dataTransfer?.files ?? [])]
   if (files.length) uploads.add(files, dir.value)
 }
@@ -440,7 +450,7 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
 
       <ContextMenuRoot>
       <ContextMenuTrigger as-child>
-      <div class="flex min-h-0 flex-1 flex-col" @contextmenu="onContextMenu">
+      <div class="relative flex min-h-0 flex-1 flex-col" @contextmenu="onContextMenu">
       <GalleryView v-if="viewMode === 'grid' && entries.length" :entries="entries" :selected="selected" class="min-h-0 flex-1" @open="open" @select="clickRow" />
       <div v-if="viewMode === 'list'" class="col-header muted grid h-9 shrink-0 select-none items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs" :style="{ gridTemplateColumns: gridCols }">
         <input type="checkbox" :checked="allSelected" :aria-label="$t('files.selectAll')" @change="toggleAll" />
@@ -456,12 +466,20 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
           <button class="flex min-w-0 items-center gap-1 hover:text-[var(--text)]" @click="setSort('modTime')"><span class="truncate">{{ $t('files.col.modified') }}</span><SortIcon col="modTime" /></button>
         </div>
       </div>
-      <div v-if="searchHits" class="absolute inset-0 z-10 overflow-auto bg-[var(--surface)]">
-        <p class="muted border-b border-[var(--border)] px-3 py-2 text-xs">
-          {{ searching ? $t('files.searching') : $t('files.found', { n: searchHits.length }) }}{{ searchHits.length >= 200 ? $t('files.truncated') : '' }}
+      <div v-if="searchMode" class="absolute inset-0 z-10 flex flex-col overflow-hidden bg-[var(--surface)]">
+        <p class="muted flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs">
+          <LoaderCircle v-if="searching" class="h-3.5 w-3.5 animate-spin" />
+          <template v-if="searching && !searchHits">{{ $t('files.searching') }}</template>
+          <template v-else-if="searchHits">{{ $t('files.found', { n: searchHits.length }) }}{{ searchHits.length >= 200 ? $t('files.truncated') : '' }}</template>
         </p>
+        <div v-if="searchHits && !searchHits.length && !searching" class="muted flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center text-sm">
+          <SearchX class="h-10 w-10 opacity-40" :stroke-width="1.25" />
+          <p>{{ $t('files.searchNone', { q: query.trim() }) }}</p>
+          <p class="text-xs">{{ $t('files.searchNoneHint') }}</p>
+        </div>
+        <div v-else class="min-h-0 flex-1 overflow-auto">
         <button
-          v-for="h in searchHits" :key="h.path"
+          v-for="h in searchHits ?? []" :key="h.path"
           class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]" @click="openHit(h)"
         >
           <FileIcon :entry="h" />
@@ -471,6 +489,7 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
           </span>
           <span class="muted text-xs tabular-nums">{{ h.isDir ? '' : formatSize(h.size) }}</span>
         </button>
+        </div>
       </div>
       <div v-show="viewMode === 'list' || !entries.length" ref="scroller" class="min-h-0 flex-1 overflow-auto">
         <div v-if="!loading && !entries.length" class="muted flex h-full flex-col items-center justify-center gap-2 p-10 text-sm">

@@ -51,11 +51,11 @@ watch(() => route.query.focus, focusFromQuery)
 
 async function save(i: SettingItem) {
   const v = Math.round(Number(drafts.value[i.key]) * meta[i.key].mul)
-  if (!Number.isFinite(v) || v < 0) { toast.push({ kind: 'error', text: t('settings.nonNegative') }); return }
-  try { await settingsApi.set(i.key, v); toast.success(t('common.saved')); await load() } catch (e) { toast.error(e) }
+  if (!Number.isFinite(v) || v < 0) { toast.warn(t('toast.settingInvalid'), t('toast.settingInvalidD')); return }
+  try { await settingsApi.set(i.key, v); toast.success(t('toast.saved'), t('toast.settingSavedD')); await load() } catch (e) { toast.error(e) }
 }
 async function reset(i: SettingItem) {
-  try { await settingsApi.reset(i.key); toast.success(t('settings.resetDone')); await load() } catch (e) { toast.error(e) }
+  try { await settingsApi.reset(i.key); toast.success(t('toast.settingReset'), t('toast.settingResetD')); await load() } catch (e) { toast.error(e) }
 }
 function show(i: SettingItem, v: number) { return meta[i.key].unit === 'MB' ? (v === 0 ? t('settings.unlimited') : formatSize(v)) : t('settings.nDays', { n: v }) }
 </script>

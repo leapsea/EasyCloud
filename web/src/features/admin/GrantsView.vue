@@ -61,11 +61,11 @@ async function create() {
   const [subjectType, subjectId] = form.value.subject.split(':')
   try {
     await adminApi.createGrant({ subjectType, subjectId, path: form.value.path, perm: form.value.perm })
-    toast.success(t('grants.granted')); newOpen.value = false; load()
+    toast.success(t('toast.grantAdded'), t('toast.grantAddedD')); newOpen.value = false; load()
   } catch (e) { toast.error(e) }
 }
 async function del(g: Grant) {
-  try { await adminApi.deleteGrant(g.id); toast.success(t('grants.revoked')); load() } catch (e) { toast.error(e) }
+  try { await adminApi.deleteGrant(g.id); toast.success(t('toast.grantRevoked'), t('toast.grantRevokedD')); load() } catch (e) { toast.error(e) }
 }
 const isHome = (g: Grant) => g.subjectType === 'user' && g.path === `/user/${users.value.find((u) => u.id === g.subjectId)?.username}`
 </script>

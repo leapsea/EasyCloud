@@ -51,9 +51,9 @@ async function createAppPassword() {
   } catch (e) { toast.error(e) }
 }
 async function removeAppPassword(a: AppPassword) {
-  try { await appPasswordApi.remove(a.id); toast.success(t('account.appPwRevoked')); loadAppPasswords() } catch (e) { toast.error(e) }
+  try { await appPasswordApi.remove(a.id); toast.success(t('toast.appPwRevoked'), t('toast.appPwRevokedD')); loadAppPasswords() } catch (e) { toast.error(e) }
 }
-async function copyText(text: string) { try { await navigator.clipboard.writeText(text); toast.success(t('common.copied')) } catch { /* ignore */ } }
+async function copyText(text: string) { try { await navigator.clipboard.writeText(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) } }
 
 onMounted(async () => {
   if (auth.user) usage.value = await filesApi.usage(auth.user.home).catch(() => null)
@@ -77,12 +77,12 @@ async function tfNext() {
     } else if (s.step === 'scan') {
       await authApi.totpEnable(s.code.replace(/\s/g, ''))
       s.open = false
-      toast.success(t('account.tfEnabled'))
+      toast.success(t('toast.tfOn'), t('toast.tfOnD'))
       await auth.check()
     } else {
       await authApi.totpDisable(s.password ? { password: s.password } : { code: s.code.replace(/\s/g, '') })
       s.open = false
-      toast.success(t('account.tfDisabled'))
+      toast.success(t('toast.tfOff'), t('toast.tfOffD'))
       await auth.check()
     }
   } catch (e) { s.error = errorMessage(e) } finally { s.busy = false }
@@ -90,11 +90,11 @@ async function tfNext() {
 const secretGroups = computed(() => tf.value.secret.replace(/(.{4})/g, '$1 ').trim())
 
 async function change() {
-  if (pw.value.next !== pw.value.confirm) { toast.push({ kind: 'error', text: t('account.pwMismatch') }); return }
+  if (pw.value.next !== pw.value.confirm) { toast.warn(t('toast.pwMismatch'), t('toast.pwMismatchD')); return }
   busy.value = true
   try {
     await authApi.changePassword(pw.value.current, pw.value.next)
-    toast.success(t('account.pwChanged'))
+    toast.success(t('toast.pwChanged'), t('toast.pwChangedD'))
     pw.value = { current: '', next: '', confirm: '' }
   } catch (e) { toast.error(e) } finally { busy.value = false }
 }

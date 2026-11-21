@@ -70,7 +70,7 @@ async function saveFixed() {
   try {
     saveState.value = { ...saveState.value, [e.path]: 'saving' }
     await tasks.create('videofix', [e.path])
-    toast.push({ kind: 'info', text: t('player.saveStarted', { name: fixedName.value }) })
+    toast.info(t('toast.videoSaving'), t('toast.videoSavingD', { name: fixedName.value }))
   } catch (err) {
     const { [e.path]: _, ...rest } = saveState.value
     saveState.value = rest
@@ -138,7 +138,7 @@ function savePosition() {
   try { localStorage.setItem(POS_KEY, JSON.stringify(all)) } catch { /* private mode */ }
 }
 
-const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 5]
 const SHORTCUTS: [string, string][] = [
   ['Space / K', 'player.keys.play'], ['← →', 'player.keys.seek5'], ['J  L', 'player.keys.seek10'], ['↑ ↓', 'player.keys.volume'],
   ['M', 'player.keys.mute'], ['F', 'player.keys.fullscreen'], ['<  >', 'player.keys.speed'], ['0 – 9', 'player.keys.jump'], ['Esc', 'player.keys.esc'],
@@ -156,6 +156,27 @@ function onLoaded() {
     flash(t('player.resumed', { t: fmt(at) }))
   }
   if ('mediaSession' in navigator && props.entry) navigator.mediaSession.metadata = new MediaMetadata({ title: props.entry.name })
+  autoplay(v)
+}
+
+// Opening a video plays it. Browsers may refuse playback with sound that is
+// not tied to a click (Safari by default): then it plays muted with an
+// "unmute" button, and that automatic mute is not saved as a preference.
+const autoMuted = ref(false)
+function autoplay(v: HTMLVideoElement) {
+  v.play().catch((e: DOMException) => {
+    if (e?.name !== 'NotAllowedError' || v.muted) return
+    autoMuted.value = true
+    v.muted = true
+    v.play().catch(() => { autoMuted.value = false; v.muted = muted.value })
+  })
+}
+function unmuteAuto() {
+  const v = video.value
+  autoMuted.value = false
+  if (!v) return
+  v.muted = false
+  if (v.volume === 0) v.volume = 0.5
 }
 let lastSave = 0
 function onTime() {
@@ -181,6 +202,8 @@ function onError() {
 }
 function onVolume() {
   const v = video.value!
+  if (autoMuted.value && v.muted) return // the automatic mute is not the user's choice
+  autoMuted.value = false
   volume.value = v.volume
   muted.value = v.muted
   savePrefs()
@@ -440,7 +463,7 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
             @pointermove="onPointerMove" @pointerdown="onPointerDown" @pointerleave="onPointerLeave" @keydown="onKey"
           >
             <video
-              v-if="entry && src" ref="video" :key="entry.path" :src="src" :loop="loop" autoplay playsinline preload="metadata"
+              v-if="entry && src" ref="video" :key="entry.path" :src="src" :loop="loop" playsinline preload="metadata"
               class="absolute inset-0 h-full w-full object-contain"
               @click="onStageClick" @dblclick="onDblClick"
               @loadedmetadata="onLoaded" @durationchange="duration = video?.duration || 0" @timeupdate="onTime" @progress="onProgress"
@@ -448,6 +471,14 @@ const icon = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-
               @waiting="waiting = true" @canplay="waiting = false" @ended="ended = true; paused = true; savePosition()"
               @volumechange="onVolume" @error="onError"
             />
+            <!-- Autoplay had to start muted (browser policy): one click restores sound. -->
+            <button
+              v-if="autoMuted && !mini"
+              class="absolute left-1/2 top-16 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm text-white shadow-lg ring-1 ring-white/15 backdrop-blur hover:bg-black/85"
+              @click.stop="unmuteAuto" @pointerdown.stop
+            >
+              <VolumeX class="h-4 w-4" />{{ $t('player.tapUnmute') }}
+            </button>
 
             <!-- Centre: buffering, play / replay, or why it cannot play. -->
             <!-- One grid cell: a fading-out button never pushes the message aside. -->
