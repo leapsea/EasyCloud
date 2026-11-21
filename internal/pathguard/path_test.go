@@ -9,7 +9,7 @@ import (
 
 func TestParse(t *testing.T) {
 	// Attack payload regression table (as received after exactly one decode).
-	bad := []string{"..", "a/../b", "./a", "a/./b", "a\\b", "a\x00b", ".easycloud", "/.easycloud/trash",
+	bad := []string{"..", "a/../b", "./a", "a/./b", "a\\b", "a\x00b", ".easycloud", "/.easycloud/trash", "a/.easycloud", "nas/.easycloud/trash/x", // reserved at any depth (mount trash)
 		"a/\x07", "\xc0\xae", "\xc0\xae\xc0\xae/etc", strings.Repeat("x", 256), "../", "/../../etc/passwd",
 		"..\\..\\windows", "a/..", "a\nb", "\xff"}
 	for _, s := range bad {
@@ -17,7 +17,7 @@ func TestParse(t *testing.T) {
 			t.Errorf("Parse(%q) should fail", s)
 		}
 	}
-	good := map[string]string{"": ".", "/": ".", "//a///b/": "a/b", "%2e%2e": "%2e%2e", "a/.easycloud": "a/.easycloud"}
+	good := map[string]string{"": ".", "/": ".", "//a///b/": "a/b", "%2e%2e": "%2e%2e", "a/.easycloud2": "a/.easycloud2"}
 	for in, want := range good {
 		p, err := Parse(in)
 		if err != nil || p.String() != want {

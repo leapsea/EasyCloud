@@ -9,8 +9,14 @@ import (
 	"unicode/utf8"
 )
 
-// ReservedDir holds trash and upload chunks; no API may address it.
+// ReservedDir holds trash and upload chunks; no API may address it. It is
+// reserved at every level, not only in the data root: a folder mounted from
+// another filesystem keeps its own trash in <mount>/.easycloud (a rename
+// cannot cross filesystems).
 const ReservedDir = ".easycloud"
+
+// IsReservedName reports whether a single path segment is the reserved name.
+func IsReservedName(name string) bool { return name == ReservedDir }
 
 var (
 	ErrInvalidPath = errors.New("pathguard: invalid path")
@@ -35,7 +41,7 @@ func Parse(raw string) (RelPath, error) {
 			return RelPath{}, ErrInvalidPath
 		case len(s) > 255 || hasControlChar(s):
 			return RelPath{}, ErrInvalidPath
-		case len(segs) == 0 && s == ReservedDir:
+		case s == ReservedDir:
 			return RelPath{}, ErrInvalidPath
 		}
 		segs = append(segs, s)

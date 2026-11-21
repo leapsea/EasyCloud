@@ -248,11 +248,13 @@ export default {
   "errors": {
     "BAD_CREDENTIALS": "用户名或密码错误",
     "CONFLICT": "目标位置已存在同名项",
+    "FS_CROSS_DEVICE": "源和目标位于不同的磁盘（挂载点），无法直接移动。",
     "FS_PERMISSION_DENIED": "服务进程没有该文件的系统权限",
     "INTERNAL": "服务器内部错误",
     "INVALID_INPUT": "输入不合法",
     "INVALID_PATH": "路径不合法",
     "LAST_ADMIN": "至少需要保留一名启用状态的管理员",
+    "MOUNT_POINT": "这是一个挂载点（单独挂载的磁盘或目录），不能删除它本身，可以删除其中的内容。",
     "NETWORK": "网络错误，请检查连接",
     "NOT_FOUND": "文件或目录不存在",
     "OFFICE_MISCONFIGURED": "OnlyOffice 连接器配置不完整",

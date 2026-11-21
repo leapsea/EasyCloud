@@ -90,3 +90,37 @@ func TestStaleUploadIsPlacedOnResume(t *testing.T) {
 		t.Fatalf("create into read-only folder: %d, want 403", res.StatusCode)
 	}
 }
+
+// The final path header is percent-encoded: raw UTF-8 in a header value is
+// read as Latin-1 by browsers and arrives garbled.
+func TestUploadPathHeaderIsEncoded(t *testing.T) {
+	e := newEnv(t)
+	admin := e.client()
+	admin.login("admin", "adminpass1")
+	e.write("share/影音 资料/keep.txt", "x")
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	req, _ := http.NewRequest("POST", e.ts.URL+"/api/upload/", nil)
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Upload-Length", "2")
+	req.Header.Set("Upload-Metadata", "filename "+b64("哈利·波特.mp3")+",dir "+b64("/share/影音 资料"))
+	res, err := admin.c.Do(req)
+	if err != nil || res.StatusCode != 201 {
+		t.Fatalf("create: %v %v", err, res)
+	}
+	loc := res.Header.Get("Location")
+	if !strings.HasPrefix(loc, "http") {
+		loc = e.ts.URL + loc
+	}
+	req, _ = http.NewRequest("PATCH", loc, bytes.NewReader([]byte("hi")))
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Upload-Offset", "0")
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	res, err = admin.c.Do(req)
+	if err != nil || res.StatusCode != 204 {
+		t.Fatalf("patch: %v %v", err, res)
+	}
+	got := res.Header.Get("X-Easycloud-Path")
+	if want := "/share/%E5%BD%B1%E9%9F%B3%20%E8%B5%84%E6%96%99/%E5%93%88%E5%88%A9%C2%B7%E6%B3%A2%E7%89%B9.mp3"; got != want {
+		t.Fatalf("X-Easycloud-Path = %q, want %q", got, want)
+	}
+}

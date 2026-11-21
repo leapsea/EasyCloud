@@ -68,8 +68,8 @@ func (s *FileService) WriteZip(ctx context.Context, sub pathguard.Subject, paths
 			default:
 				name = base + "/" + strings.TrimPrefix(p, it.h.Rel+"/")
 			}
-			if it.p.IsRoot() && (p == pathguard.ReservedDir || strings.HasPrefix(p, pathguard.ReservedDir+"/")) {
-				return fs.SkipDir
+			if d.IsDir() && pathguard.IsReservedName(d.Name()) {
+				return fs.SkipDir // trash of a mounted folder, at any depth
 			}
 			info, err := d.Info()
 			if err != nil {

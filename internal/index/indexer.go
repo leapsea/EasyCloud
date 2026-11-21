@@ -72,8 +72,15 @@ func statKey(fi fs.FileInfo) (uint64, uint64) {
 	return 0, 0
 }
 
+// isReserved: p is or lies inside a reserved directory, at any depth (mounted
+// folders keep their trash in <mount>/.easycloud).
 func isReserved(p string) bool {
-	return p == pathguard.ReservedDir || strings.HasPrefix(p, pathguard.ReservedDir+"/")
+	for _, seg := range strings.Split(p, "/") {
+		if pathguard.IsReservedName(seg) {
+			return true
+		}
+	}
+	return false
 }
 
 // Run performs the initial scan, then follows fsnotify events and reconciles periodically.

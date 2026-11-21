@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -155,7 +156,7 @@ func (s *Service) preFinish(hook tus.HookEvent) (tus.HTTPResponse, error) {
 	if err != nil {
 		return tus.HTTPResponse{}, tusErr(err)
 	}
-	return tus.HTTPResponse{Header: tus.HTTPHeader{"X-Easycloud-Path": e.Path}}, nil
+	return tus.HTTPResponse{Header: tus.HTTPHeader{"X-Easycloud-Path": headerPath(e.Path)}}, nil
 }
 
 func (s *Service) place(ctx context.Context, sub pathguard.Subject, info tus.FileInfo, remote string) (domain.FileEntry, error) {
@@ -217,7 +218,7 @@ func (s *Service) finishStale(w http.ResponseWriter, r *http.Request, id string)
 	h.Set("Upload-Offset", strconv.FormatInt(info.Size, 10))
 	h.Set("Upload-Length", strconv.FormatInt(info.Size, 10))
 	h.Set("Cache-Control", "no-store")
-	h.Set("X-Easycloud-Path", e.Path)
+	h.Set("X-Easycloud-Path", headerPath(e.Path))
 	w.WriteHeader(http.StatusOK)
 	return true
 }
@@ -300,6 +301,11 @@ func (s *Service) sweep(maxAge time.Duration) error {
 	}
 	return errors.Join(errsOut...)
 }
+
+// headerPath percent-encodes a path for a response header: header values are
+// bytes that browsers read as Latin-1, so raw UTF-8 (Chinese folder names)
+// arrives garbled. Slashes stay; the client decodes with decodeURIComponent.
+func headerPath(p string) string { return (&url.URL{Path: p}).EscapedPath() }
 
 func hostOnly(addr string) string {
 	if h, _, err := net.SplitHostPort(addr); err == nil {

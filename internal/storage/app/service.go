@@ -148,6 +148,8 @@ func mapFSErr(err error) error {
 		return errs.New(403, "FS_PERMISSION_DENIED").Wrap(err)
 	case strings.Contains(err.Error(), "path escapes"):
 		return errs.ErrNotFound.Wrap(err)
+	case errors.Is(err, syscall.EXDEV):
+		return errs.New(409, "FS_CROSS_DEVICE").Wrap(err)
 	}
 	return err
 }
@@ -182,7 +184,7 @@ func (s *FileService) List(ctx context.Context, sub pathguard.Subject, dir strin
 	}
 	out := make([]domain.FileEntry, 0, len(des))
 	for _, de := range des {
-		if p.IsRoot() && de.Name() == pathguard.ReservedDir {
+		if pathguard.IsReservedName(de.Name()) {
 			continue
 		}
 		child, err := p.Join(de.Name())
@@ -579,6 +581,9 @@ func copyTree(ctx context.Context, sr *os.Root, src string, dr *os.Root, dst str
 			return err
 		}
 		for _, de := range des {
+			if pathguard.IsReservedName(de.Name()) {
+				continue // a mount's own trash: other users' deleted files
+			}
 			if err := copyTree(ctx, sr, path.Join(src, de.Name()), dr, path.Join(dst, de.Name())); err != nil {
 				return err
 			}

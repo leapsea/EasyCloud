@@ -248,11 +248,13 @@ export default {
   "errors": {
     "BAD_CREDENTIALS": "Incorrect username or password",
     "CONFLICT": "An item with the same name already exists",
+    "FS_CROSS_DEVICE": "Source and target are on different disks (mounts) and cannot be moved directly.",
     "FS_PERMISSION_DENIED": "The server process has no OS permission for this file",
     "INTERNAL": "Internal server error",
     "INVALID_INPUT": "Invalid input",
     "INVALID_PATH": "Invalid path",
     "LAST_ADMIN": "At least one active administrator is required",
+    "MOUNT_POINT": "This folder is a mount point (a separately mounted disk or folder); it cannot be deleted itself, only its contents.",
     "NETWORK": "Network error. Check your connection.",
     "NOT_FOUND": "File or folder not found",
     "OFFICE_MISCONFIGURED": "The OnlyOffice connector is misconfigured",

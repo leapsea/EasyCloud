@@ -32,6 +32,9 @@ const MIN_CHUNK = 512 * 1024
 // PATCH hanging before it reaches the server. Waiting for the response after
 // the body was fully sent is not watched: the server may be moving a big file.
 const STALL_MS = 20_000
+// The body was sent but no answer came back: a proxy that swallowed the
+// request. Long, because the server may be copying a big file into place.
+const AWAIT_MS = 5 * 60_000
 const MAX_STALL_RESTARTS = 5
 
 const statusOf = (err: Error) => (err as tus.DetailedError).originalResponse?.getStatus() ?? 0
@@ -119,7 +122,7 @@ export const useUploads = defineStore('uploads', () => {
         },
         onAfterResponse(_req, res) {
           const p = res.getHeader('X-Easycloud-Path')
-          if (p) reactiveItem.finalPath = p
+          if (p) { try { reactiveItem.finalPath = decodeURIComponent(p) } catch { reactiveItem.finalPath = p } }
         },
         onSuccess() {
           fileOf.delete(reactiveItem.id)
@@ -199,7 +202,7 @@ export const useUploads = defineStore('uploads', () => {
       if (!w || !up || now - w.at < STALL_MS) continue
       const chunk = chunks.get(i.id) ?? chunkSize
       const bodySent = i.sent >= Math.min(w.accepted + chunk, i.size)
-      if (bodySent) continue // waiting for the server's answer, not stuck sending
+      if (bodySent && now - w.at < AWAIT_MS) continue // waiting for the server's answer
       if (w.restarts >= MAX_STALL_RESTARTS) {
         up.abort()
         i.state = 'error'

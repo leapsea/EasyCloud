@@ -168,7 +168,7 @@ func (r *realFile) Readdir(count int) ([]fs.FileInfo, error) {
 	infos, err := r.File.Readdir(count)
 	out := infos[:0]
 	for _, fi := range infos {
-		if r.dir.IsRoot() && fi.Name() == pathguard.ReservedDir {
+		if pathguard.IsReservedName(fi.Name()) {
 			continue
 		}
 		if fi.Mode()&fs.ModeSymlink != 0 {
