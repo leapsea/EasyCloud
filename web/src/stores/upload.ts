@@ -65,6 +65,10 @@ export const useUploads = defineStore('uploads', () => {
         chunkSize,
         retryDelays: [0, 1000, 3000, 5000, 10000],
         removeFingerprintOnSuccess: true,
+        // Resume only an upload of the same file into the same folder: the
+        // default fingerprint ignores the folder, so the same file sent to
+        // another folder would resume the old upload and land in the old one.
+        fingerprint: async (f: File) => ['ec-tus', dir, f.name, f.type, f.size, f.lastModified].join('|'),
         metadata: { filename: file.name, dir, onConflict: 'rename' },
         onProgress(sent) {
           const now = performance.now()

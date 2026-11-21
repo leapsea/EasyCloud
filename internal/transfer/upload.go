@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"github.com/easycloud/easycloud/internal/audit"
+	"github.com/easycloud/easycloud/internal/pathguard"
 	"github.com/easycloud/easycloud/internal/platform/errs"
 	"github.com/easycloud/easycloud/internal/platform/httpx"
 	"github.com/easycloud/easycloud/internal/settings"
 	"github.com/easycloud/easycloud/internal/storage/app"
+	"github.com/easycloud/easycloud/internal/storage/domain"
 	"github.com/tus/tusd/v2/pkg/filelocker"
 	"github.com/tus/tusd/v2/pkg/filestore"
 	tus "github.com/tus/tusd/v2/pkg/handler"
@@ -40,6 +42,7 @@ type Service struct {
 	files    *app.FileService
 	settings settings.Resolver
 	store    filestore.FileStore
+	locker   filelocker.FileLocker
 	dir      string
 	handler  *tus.Handler
 	audit    *audit.Recorder
@@ -62,7 +65,8 @@ func NewService(dataRoot string, files *app.FileService, s settings.Resolver, re
 	composer.UseCore(svc.store)
 	composer.UseTerminater(svc.store)
 	composer.UseLengthDeferrer(svc.store)
-	filelocker.New(dir).UseIn(composer)
+	svc.locker = filelocker.New(dir)
+	svc.locker.UseIn(composer)
 
 	h, err := tus.NewHandler(tus.Config{
 		BasePath:                  BasePath,
@@ -147,18 +151,75 @@ func (s *Service) preCreate(hook tus.HookEvent) (tus.HTTPResponse, tus.FileInfoC
 
 // preFinish moves the finished file into place and reports the final path in a header.
 func (s *Service) preFinish(hook tus.HookEvent) (tus.HTTPResponse, error) {
-	info := hook.Upload
-	m := info.MetaData
-	sub := httpx.SubjectFrom(hook.Context)
-	e, err := s.files.PlaceUpload(hook.Context, sub, info.ID, m[metaDir], m[metaFilename], app.ConflictPolicy(m[metaOnConflict]))
+	e, err := s.place(hook.Context, httpx.SubjectFrom(hook.Context), hook.Upload, hook.HTTPRequest.RemoteAddr)
 	if err != nil {
-		s.log.Warn("upload placement failed", "id", info.ID, "err", err)
 		return tus.HTTPResponse{}, tusErr(err)
+	}
+	return tus.HTTPResponse{Header: tus.HTTPHeader{"X-Easycloud-Path": e.Path}}, nil
+}
+
+func (s *Service) place(ctx context.Context, sub pathguard.Subject, info tus.FileInfo, remote string) (domain.FileEntry, error) {
+	m := info.MetaData
+	e, err := s.files.PlaceUpload(ctx, sub, info.ID, m[metaDir], m[metaFilename], app.ConflictPolicy(m[metaOnConflict]))
+	if err != nil {
+		s.log.Warn("upload placement failed", "id", info.ID, "dir", m[metaDir], "name", m[metaFilename], "err", err)
+		return e, err
 	}
 	_ = os.Remove(filepath.Join(s.dir, info.ID+".info"))
 	s.audit.Record(audit.Entry{UserID: sub.UserID, Username: sub.Username, Action: "file.upload", Path: e.Path,
-		Detail: strconv.FormatInt(e.Size, 10), IP: hostOnly(hook.HTTPRequest.RemoteAddr)})
-	return tus.HTTPResponse{Header: tus.HTTPHeader{"X-Easycloud-Path": e.Path}}, nil
+		Detail: strconv.FormatInt(e.Size, 10), IP: hostOnly(remote)})
+	return e, nil
+}
+
+// finishStale handles a HEAD on an upload whose data is complete but which is
+// still in the upload area: its placement failed earlier (e.g. the folder was
+// not writable). tus clients treat "offset == length" as success and never
+// send another request, so without this the file would never be placed while
+// the UI reports it uploaded. Placement is retried now; if it fails again the
+// stale upload is removed and 404 returned, so the client starts a fresh
+// upload whose creation reports the actual error. Returns false when the
+// request is not such a case and tusd should answer it.
+func (s *Service) finishStale(w http.ResponseWriter, r *http.Request, id string) bool {
+	ctx := r.Context()
+	up, err := s.store.GetUpload(ctx, id)
+	if err != nil {
+		return false
+	}
+	info, err := up.GetInfo(ctx)
+	if err != nil || info.SizeIsDeferred || info.Offset != info.Size {
+		return false
+	}
+	lock, err := s.locker.NewLock(id)
+	if err != nil {
+		return false
+	}
+	lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := lock.Lock(lctx, func() {}); err != nil {
+		return false // busy (its final PATCH may be finishing): let tusd answer
+	}
+	defer lock.Unlock()
+	if info, err = up.GetInfo(ctx); err != nil { // re-read under the lock
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(s.dir, id)); err != nil {
+		return false
+	}
+	e, err := s.place(ctx, httpx.Subject(r), info, r.RemoteAddr)
+	if err != nil {
+		_ = s.store.AsTerminatableUpload(up).Terminate(ctx)
+		s.log.Info("stale upload removed after failed placement; the client will start over", "id", id)
+		http.NotFound(w, r)
+		return true
+	}
+	h := w.Header()
+	h.Set("Tus-Resumable", "1.0.0")
+	h.Set("Upload-Offset", strconv.FormatInt(info.Size, 10))
+	h.Set("Upload-Length", strconv.FormatInt(info.Size, 10))
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Easycloud-Path", e.Path)
+	w.WriteHeader(http.StatusOK)
+	return true
 }
 
 // Handler wraps tusd with an owner check so one user cannot read, append to
@@ -183,6 +244,9 @@ func (s *Service) Handler() http.Handler {
 		id := strings.Trim(strings.TrimPrefix(r.URL.Path, BasePath), "/")
 		if id != "" && !s.ownedBy(r.Context(), id, httpx.Subject(r).UserID) {
 			http.NotFound(w, r)
+			return
+		}
+		if id != "" && r.Method == http.MethodHead && s.finishStale(w, r, id) {
 			return
 		}
 		inner.ServeHTTP(w, r)
