@@ -52,6 +52,7 @@ func NewService(dataRoot string, files *app.FileService, s settings.Resolver, re
 		return nil, err
 	}
 	svc := &Service{files: files, settings: s, store: filestore.New(dir), dir: dir, audit: rec, log: log}
+	svc.probe()
 	// Only the extensions the web client uses. Concatenation is left out on
 	// purpose: a "final" upload names other uploads by ID, and tusd neither
 	// checks their owner nor goes through Handler's owner check (creation is
@@ -78,6 +79,23 @@ func NewService(dataRoot string, files *app.FileService, s settings.Resolver, re
 	}
 	svc.handler = h
 	return svc, nil
+}
+
+// probe writes and removes a file in the upload area at startup. Uploads stage
+// every chunk there, so if it is not writable (typically: created by another
+// uid, e.g. an earlier run as root, or a data directory owned by someone
+// else) every upload fails; say so once, plainly, instead of only per request.
+func (s *Service) probe() {
+	f, err := os.CreateTemp(s.dir, ".probe-*")
+	if err == nil {
+		f.Close()
+		err = os.Remove(f.Name())
+	}
+	if err != nil {
+		s.log.Error("upload area is not writable: uploads will fail",
+			"dir", s.dir, "uid", os.Getuid(), "gid", os.Getgid(), "err", err,
+			"fix", fmt.Sprintf("on the host: sudo chown -R %d:%d <data dir>/%s", os.Getuid(), os.Getgid(), app.UploadDir))
+	}
 }
 
 func tusErr(err error) error {
@@ -112,6 +130,10 @@ func (s *Service) preCreate(hook tus.HookEvent) (tus.HTTPResponse, tus.FileInfoC
 	}
 	name, dir := info.MetaData[metaFilename], info.MetaData[metaDir]
 	if err := s.files.CheckUploadTarget(ctx, sub, dir, name, info.Size); err != nil {
+		return tus.HTTPResponse{}, tus.FileInfoChanges{}, tusErr(err)
+	}
+	if err := s.files.ProbeUploadDir(ctx, sub, dir); err != nil {
+		s.log.Warn("upload refused: target folder not writable by the server process", "dir", dir, "uid", os.Getuid(), "gid", os.Getgid(), "err", err)
 		return tus.HTTPResponse{}, tus.FileInfoChanges{}, tusErr(err)
 	}
 	policy := info.MetaData[metaOnConflict]
@@ -222,8 +244,36 @@ func hostOnly(addr string) string {
 	return addr
 }
 
-// quietTus keeps tusd's per-request INFO lines out of the log; warnings still pass.
-// tusd uses golang.org/x/exp/slog, a distinct type from log/slog.
-func quietTus(_ *slog.Logger) *expslog.Logger {
-	return expslog.New(expslog.NewJSONHandler(os.Stdout, &expslog.HandlerOptions{Level: expslog.LevelWarn}))
+// quietTus routes tusd's warnings and errors (e.g. "InternalServerError:
+// permission denied" while writing a chunk) into the application log, so they
+// reach the log file like everything else; its per-request INFO lines are
+// dropped. tusd uses golang.org/x/exp/slog, a distinct type from log/slog.
+func quietTus(log *slog.Logger) *expslog.Logger {
+	return expslog.New(tusBridge{log: log.With("component", "tus")})
+}
+
+type tusBridge struct{ log *slog.Logger }
+
+func (b tusBridge) Enabled(_ context.Context, l expslog.Level) bool { return l >= expslog.LevelWarn }
+
+func (b tusBridge) Handle(ctx context.Context, r expslog.Record) error {
+	attrs := make([]any, 0, r.NumAttrs()*2)
+	r.Attrs(func(a expslog.Attr) bool {
+		attrs = append(attrs, a.Key, a.Value.Any())
+		return true
+	})
+	b.log.Log(ctx, slog.Level(r.Level), "upload: "+r.Message, attrs...)
+	return nil
+}
+
+func (b tusBridge) WithAttrs(as []expslog.Attr) expslog.Handler {
+	kv := make([]any, 0, len(as)*2)
+	for _, a := range as {
+		kv = append(kv, a.Key, a.Value.Any())
+	}
+	return tusBridge{log: b.log.With(kv...)}
+}
+
+func (b tusBridge) WithGroup(name string) expslog.Handler {
+	return tusBridge{log: b.log.WithGroup(name)}
 }

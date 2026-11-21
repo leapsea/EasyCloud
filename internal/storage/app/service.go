@@ -634,6 +634,29 @@ func (s *FileService) CheckUploadTarget(ctx context.Context, sub pathguard.Subje
 	return s.checkQuota(ctx, sub, target, size)
 }
 
+// ProbeUploadDir checks that the server process may create files in dir (OS
+// permission, not grants: CheckUploadTarget covers those). Uploads call it
+// before any data is sent, so a folder owned by another uid fails at once
+// instead of after transferring the whole file.
+func (s *FileService) ProbeUploadDir(ctx context.Context, sub pathguard.Subject, dir string) error {
+	d, err := pathguard.Parse(dir)
+	if err != nil {
+		return errs.ErrInvalidPath
+	}
+	h, err := s.guard.Check(ctx, sub, d, pathguard.PermWrite)
+	if err != nil {
+		return errs.ErrNotFound
+	}
+	defer h.Close()
+	tmp := path.Join(h.Rel, ".~easycloud-probe-"+newID())
+	f, err := h.Root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return mapFSErr(err)
+	}
+	f.Close()
+	return mapFSErr(h.Root.Remove(tmp))
+}
+
 // PlaceUpload atomically renames a finished upload (uploadName inside UploadDir) to dir/name.
 func (s *FileService) PlaceUpload(ctx context.Context, sub pathguard.Subject, uploadName, dir, name string, policy ConflictPolicy) (domain.FileEntry, error) {
 	if err := s.CheckUploadTarget(ctx, sub, dir, name, 0); err != nil {
@@ -656,11 +679,46 @@ func (s *FileService) PlaceUpload(ctx context.Context, sub pathguard.Subject, up
 			return domain.FileEntry{}, errs.ErrConflict
 		}
 	}
-	if err := s.dataRoot.Rename(path.Join(UploadDir, uploadName), target.String()); err != nil {
-		return domain.FileEntry{}, mapFSErr(err)
+	src := path.Join(UploadDir, uploadName)
+	if err := s.dataRoot.Rename(src, target.String()); err != nil {
+		if !errors.Is(err, syscall.EXDEV) {
+			return domain.FileEntry{}, mapFSErr(err)
+		}
+		// The target is on another filesystem than the upload area (a folder
+		// mounted separately inside the data root): copy, then drop the staged file.
+		if err := s.copyInto(src, target.String()); err != nil {
+			return domain.FileEntry{}, mapFSErr(err)
+		}
+		_ = s.dataRoot.Remove(src)
 	}
 	s.publish("created", target.Parent())
 	return s.Stat(ctx, sub, target.Display())
+}
+
+// copyInto copies src to dst (both relative to the data root) through a temp
+// file next to dst, renamed into place once complete.
+func (s *FileService) copyInto(src, dst string) error {
+	in, err := s.dataRoot.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp := path.Join(path.Dir(dst), ".~easycloud-"+newID()+".tmp")
+	out, err := s.dataRoot.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, in)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = s.dataRoot.Rename(tmp, dst)
+	}
+	if err != nil {
+		_ = s.dataRoot.Remove(tmp)
+	}
+	return err
 }
 
 // sameHome reports whether a and b are inside the same user/<name> directory.

@@ -431,7 +431,9 @@ export default {
   "player": {
     "analyzing": "Analyzing video…",
     "back": "−{n} s",
+    "backgroundHint": "Minimize to keep listening in the background, across pages.",
     "cast": "Cast",
+    "errorAudio": "The browser cannot play this audio. Download it and use a local player.",
     "errorCodec": "This browser cannot play this video; its codec or container is probably unsupported (e.g. HEVC, MKV). Download it to play locally.",
     "errorNetwork": "The network failed while loading the video. Please try again.",
     "exitFullscreen": "Exit fullscreen",
@@ -476,6 +478,7 @@ export default {
     "saved": "Saved",
     "saving": "Saving",
     "shortcutsTitle": "Keyboard shortcuts",
+    "spectrum": "Audio spectrum",
     "speed": "Speed",
     "speedIs": "{n}× speed",
     "speedShort": "Speed",

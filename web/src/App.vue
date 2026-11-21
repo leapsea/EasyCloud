@@ -7,6 +7,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 import { realtime } from '@/api/realtime'
 import Toasts from '@/components/Toasts.vue'
+import GlobalAudio from '@/components/GlobalAudio.vue'
 import UploadPanel from '@/features/upload/UploadPanel.vue'
 import TransferButton from '@/features/upload/TransferButton.vue'
 import QuotaBar from '@/components/QuotaBar.vue'
@@ -129,4 +130,5 @@ const adminNav = [
     <UploadPanel />
   </div>
   <Toasts />
+  <GlobalAudio v-if="!bare" />
 </template>

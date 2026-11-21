@@ -431,7 +431,9 @@ export default {
   "player": {
     "analyzing": "正在分析视频…",
     "back": "后退 {n} 秒",
+    "backgroundHint": "最小化后可继续在后台播放，切换页面不会中断。",
     "cast": "投屏",
+    "errorAudio": "浏览器无法播放此音频，可下载后用本地播放器打开。",
     "errorCodec": "浏览器无法播放此视频，可能是编码或格式不受支持（如 HEVC、MKV）。可下载后用本地播放器打开。",
     "errorNetwork": "加载视频时网络中断，请重试。",
     "exitFullscreen": "退出全屏",
@@ -476,6 +478,7 @@ export default {
     "saved": "已保存",
     "saving": "保存中",
     "shortcutsTitle": "快捷键",
+    "spectrum": "音频频谱",
     "speed": "播放速度",
     "speedIs": "{n} 倍速",
     "speedShort": "倍速",

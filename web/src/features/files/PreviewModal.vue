@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import { useAudio } from '@/stores/audio'
 import Modal from '@/components/Modal.vue'
 import VideoPlayer from './VideoPlayer.vue'
 import { filesApi, type FileEntry } from '@/api/files'
@@ -8,8 +9,11 @@ import { filesApi, type FileEntry } from '@/api/files'
 const props = defineProps<{ entry: FileEntry | null }>()
 const emit = defineEmits<{ close: []; download: [e: FileEntry] }>()
 
-// Video has its own full player; everything else uses the generic dialog.
-const open = computed({ get: () => !!props.entry && kind.value !== 'video', set: (v) => { if (!v) emit('close') } })
+// Video has its own full player; audio goes to the app-wide player (it keeps
+// playing when minimized or on other pages); the rest uses the generic dialog.
+const open = computed({ get: () => !!props.entry && kind.value !== 'video' && kind.value !== 'audio', set: (v) => { if (!v) emit('close') } })
+const audio = useAudio()
+watch(() => props.entry, (e) => { if (e && kind.value === 'audio') { audio.open(e); emit('close') } })
 const url = computed(() => (props.entry ? filesApi.downloadUrl(props.entry.path, true) : ''))
 const kind = computed(() => {
   const m = props.entry?.mime ?? ''
@@ -25,7 +29,6 @@ const kind = computed(() => {
   <Modal v-model:open="open" :title="entry?.name ?? ''" wide>
     <div class="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-lg bg-black/5">
       <img v-if="kind === 'image'" :src="url" :alt="entry?.name" class="max-h-[60vh] object-contain" />
-      <audio v-else-if="kind === 'audio'" :src="url" controls class="w-full p-6" />
       <iframe v-else :src="url" sandbox="" class="h-[60vh] w-full bg-white" :title="entry?.name" />
     </div>
     <template #footer>
