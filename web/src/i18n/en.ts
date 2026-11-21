@@ -41,6 +41,7 @@ export default {
   "actions": {
     "officeCheck": "Check OnlyOffice settings",
     "officeConfigure": "Configure OnlyOffice connector",
+    "uploadChunk": "Adjust upload chunk size",
     "uploadLimit": "Adjust upload limit",
     "userQuota": "Adjust user quota"
   },
@@ -259,6 +260,8 @@ export default {
     "PLUGIN_REPOSITORY_UNAVAILABLE": "The plugin repository is unavailable",
     "PLUGIN_UNTRUSTED": "The plugin is not signed by a trusted key",
     "PROTECTED_PATH": "System folders (/user and personal spaces) cannot be deleted, moved or renamed",
+    "PROXY_BODY_TOO_LARGE": "The reverse proxy in front of EasyCloud rejected the upload (413, body too large), even with smaller chunks. Raise the proxy's upload size limit (e.g. nginx client_max_body_size) or lower the upload chunk size in settings.",
+    "PROXY_REJECTED": "The request was refused by a reverse proxy or firewall in front of EasyCloud and never reached the server. Check the proxy configuration.",
     "QUOTA_EXCEEDED": "Storage quota exceeded",
     "SHARE_BAD_PASSWORD": "Incorrect share code",
     "SHARE_GONE": "This share is no longer available: it expired, was revoked, or reached its download limit",
@@ -271,6 +274,7 @@ export default {
     "TOTP_NOT_ENABLED": "Two-step verification is not on",
     "TOTP_NO_SETUP": "Binding expired, start again",
     "UNAUTHORIZED": "Your session has expired. Please sign in again.",
+    "UPLOAD_STALLED": "The upload stalled repeatedly (data could not be sent) and was stopped. Check the network or reverse proxy, then resume.",
     "UPLOAD_TOO_LARGE": "The file exceeds the upload size limit"
   },
   "files": {
@@ -672,6 +676,9 @@ export default {
     "restore": "Restore",
     "restored": "Restored to {path}",
     "subtitle": "Items are deleted permanently when they expire"
+  },
+  "upload": {
+    "proxyShrink": "A reverse proxy limits the request size; the upload chunk was reduced to {size}. Raise the proxy's limit (e.g. nginx client_max_body_size) for faster uploads."
   },
   "users": {
     "access": {

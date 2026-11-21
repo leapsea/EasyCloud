@@ -41,6 +41,7 @@ export default {
   "actions": {
     "officeCheck": "检查 OnlyOffice 配置",
     "officeConfigure": "配置 OnlyOffice 连接器",
+    "uploadChunk": "调整上传分片",
     "uploadLimit": "调整上传限制",
     "userQuota": "调整用户配额"
   },
@@ -259,6 +260,8 @@ export default {
     "PLUGIN_REPOSITORY_UNAVAILABLE": "无法访问插件仓库",
     "PLUGIN_UNTRUSTED": "插件未被受信任的密钥签名",
     "PROTECTED_PATH": "系统目录（/user 及个人空间）不能删除、移动或重命名",
+    "PROXY_BODY_TOO_LARGE": "上传被 EasyCloud 前面的反向代理拒绝（413 请求体过大），缩小分片后仍失败。请调大代理的上传大小限制（如 nginx 的 client_max_body_size），或在系统设置中调小上传分片。",
+    "PROXY_REJECTED": "请求被 EasyCloud 前面的反向代理或防火墙拒绝，未到达服务器。请检查代理配置。",
     "QUOTA_EXCEEDED": "超出存储配额",
     "SHARE_BAD_PASSWORD": "提取码错误",
     "SHARE_GONE": "分享已失效：可能已过期、被取消或下载次数已用完",
@@ -271,6 +274,7 @@ export default {
     "TOTP_NOT_ENABLED": "未绑定两步验证",
     "TOTP_NO_SETUP": "绑定已失效，请重新开始",
     "UNAUTHORIZED": "登录已失效，请重新登录",
+    "UPLOAD_STALLED": "上传多次停滞（数据发不出去），已停止。请检查网络或反向代理配置后点击继续。",
     "UPLOAD_TOO_LARGE": "文件超过上传大小限制"
   },
   "files": {
@@ -672,6 +676,9 @@ export default {
     "restore": "恢复",
     "restored": "已恢复到 {path}",
     "subtitle": "到期后自动永久删除"
+  },
+  "upload": {
+    "proxyShrink": "反向代理限制了单次请求大小，已自动把上传分片缩小到 {size}。建议调大代理的上传限制（如 nginx client_max_body_size）以提高速度。"
   },
   "users": {
     "access": {
