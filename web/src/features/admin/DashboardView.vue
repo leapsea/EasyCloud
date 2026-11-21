@@ -2,7 +2,7 @@
 import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { tint, useTheme } from '@/theme/theme'
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { adminApi, type MetricPoint, type SystemInfo } from '@/api/admin'
 import { realtime } from '@/api/realtime'
 import { useToast } from '@/stores/toast'
@@ -26,16 +26,32 @@ const historyVersion = ref(0)
 // The time axis always spans the whole selected range, so a fresh install shows
 // its first samples at the right edge instead of a squashed axis.
 const win = ref({ from: Date.now() - 3600_000, to: Date.now() })
+// The server averages history into buckets of `step`; live samples are folded
+// into the same buckets (running average) so the right edge is as calm as the rest.
+let stepMs = 20_000
+const lastCount: Record<string, number> = {}
 
+// A newer request (quick range switching) wins; live samples wait until the
+// history of the current range is in, so they never append to another range.
+let loadSeq = 0
+const loadingHistory = ref(false)
 async function loadHistory() {
+  const my = ++loadSeq
+  loadingHistory.value = true
   try {
     const r = await adminApi.metrics(metricNames, range.value)
+    if (my !== loadSeq) return
     const s: Record<string, [number, number][]> = {}
-    for (const [k, pts] of Object.entries(r.series)) s[k] = (pts as MetricPoint[]).map((p) => [p.t * 1000, p.v])
+    for (const [k, pts] of Object.entries(r.series)) {
+      const list = pts as MetricPoint[]
+      s[k] = list.map((p) => [p.t * 1000, p.v])
+      lastCount[k] = list.at(-1)?.n || 1
+    }
+    stepMs = (r.step || 20) * 1000
     series.value = s
     win.value = { from: r.from * 1000, to: r.to * 1000 }
     historyVersion.value++ // full redraw only for a freshly loaded history
-  } catch (e) { toast.error(e) }
+  } catch (e) { if (my === loadSeq) toast.error(e) } finally { if (my === loadSeq) loadingHistory.value = false }
 }
 async function loadInfo() { try { info.value = await adminApi.system() } catch (e) { toast.error(e) } }
 
@@ -47,13 +63,24 @@ onMounted(() => {
   unsub = realtime.subscribe('metrics', (d) => {
     const m = d as Record<string, number>
     live.value = m
-    if (range.value !== '1h') return
+    if (range.value !== '1h' || loadingHistory.value) return
     const t = m.t * 1000, cut = t - 3600_000
     win.value = { from: cut, to: t }
     const s = { ...series.value }
+    const bucket = t - (t % stepMs)
     for (const k of metricNames) {
       if (m[k] === undefined) continue
-      s[k] = [...(s[k] ?? []).filter((p) => p[0] >= cut), [t, m[k]]]
+      const pts = (s[k] ?? []).filter((p) => p[0] >= cut)
+      const last = pts.at(-1)
+      if (last && last[0] === bucket) {
+        const n = lastCount[k] ?? 1
+        pts[pts.length - 1] = [bucket, (last[1] * n + m[k]) / (n + 1)]
+        lastCount[k] = n + 1
+      } else {
+        pts.push([bucket, m[k]])
+        lastCount[k] = 1
+      }
+      s[k] = pts
     }
     series.value = s
   }, loadHistory)
@@ -62,10 +89,14 @@ onBeforeUnmount(() => { unsub?.(); clearInterval(infoTimer) })
 
 function setRange(v: string) { range.value = v; loadHistory() }
 
+// The axis follows the range of the data on screen, not the button just
+// clicked: otherwise the labels switch format before the new data arrives.
+const shownRange = ref(range.value)
+watch(historyVersion, () => { shownRange.value = range.value })
 const axisTime = computed(() => ({
   type: 'time', axisLine: { show: false }, splitLine: { show: false }, splitNumber: 4,
   min: win.value.from, max: win.value.to,
-  axisLabel: { hideOverlap: true, formatter: ['1h', '6h', '24h'].includes(range.value) ? '{HH}:{mm}' : '{MM}-{dd}' },
+  axisLabel: { hideOverlap: true, formatter: ['1h', '6h', '24h'].includes(shownRange.value) ? '{HH}:{mm}' : '{MM}-{dd}' },
 }))
 // Gap markers are null: show a dash instead of crashing the formatter.
 const fmt = (f: (v: number) => string) => (v: unknown) => (typeof v === 'number' ? f(v) : '—')

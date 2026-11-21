@@ -29,8 +29,20 @@ onBeforeUnmount(() => { ro.disconnect(); chart.value?.dispose() })
 watch(theme.dark, init) // re-create with the matching ECharts theme
 watch(() => theme.state.accent, init)
 watch(locale, init) // series names are translated, so rebuild instead of merging
-watch(() => props.option, (o) => chart.value?.setOption(o, { lazyUpdate: true }))
-watch(() => props.resetKey, () => chart.value?.setOption({ backgroundColor: 'transparent', ...props.option }, { notMerge: true }))
+// One watcher for both, so a reset is never preceded by a merge: merging a
+// different data set (another time range) makes ECharts morph the old line
+// into the new one point by point, which draws crossing lines across the
+// chart. A reset clears first, so the new data only plays its entrance.
+watch([() => props.option, () => props.resetKey], ([o, key], [, oldKey]) => {
+  const c = chart.value
+  if (!c) return
+  if (key !== oldKey) {
+    c.clear()
+    c.setOption({ backgroundColor: 'transparent', ...o })
+  } else {
+    c.setOption(o, { lazyUpdate: true })
+  }
+})
 </script>
 
 <template>

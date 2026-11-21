@@ -163,6 +163,20 @@ func (h *HTTP) MountAdmin(r chi.Router) {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
+	// Every folder a user can reach: own and department grants, with sources.
+	r.Get("/users/{id}/access", h.h(func(w http.ResponseWriter, r *http.Request) error {
+		id := chi.URLParam(r, "id")
+		items, err := h.svc.AccessOf(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		u, err := h.svc.r.userBy(r.Context(), "id", id)
+		if err != nil {
+			return err
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"admin": u.Role == RoleAdmin, "items": items})
+		return nil
+	}))
 	r.Get("/groups", h.h(h.listGroups))
 	r.Post("/groups", h.h(h.createGroup))
 	r.Patch("/groups/{id}", h.h(h.updateGroup))

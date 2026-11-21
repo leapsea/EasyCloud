@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
-import { Plus } from 'lucide-vue-next'
+import { FolderTree, Plus } from 'lucide-vue-next'
+import UserAccessTree from './UserAccessTree.vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { adminApi, type Group, type User } from '@/api/admin'
@@ -13,6 +14,9 @@ import { formatSize, formatTime } from '@/components/format'
 const { t } = useI18n()
 
 const toast = useToast()
+// Folder permissions viewer.
+const accessUser = ref<User | null>(null)
+const accessOpen = computed({ get: () => !!accessUser.value, set: (v) => { if (!v) accessUser.value = null } })
 const auth = useAuth()
 const route = useRoute()
 const users = ref<User[]>([])
@@ -131,11 +135,22 @@ function genPassword() {
               </div>
             </td>
             <td class="muted hidden px-2 text-xs md:table-cell">{{ formatTime(u.createdAt) }}</td>
-            <td class="px-4 text-right"><button class="btn btn-sm" @click="startEdit(u)">{{ $t('common.edit') }}</button></td>
+            <td class="whitespace-nowrap px-4"><div class="flex items-center justify-end gap-1.5">
+              <button class="btn btn-sm" :title="$t('users.access.button')" @click="accessUser = u"><FolderTree class="h-3.5 w-3.5" /><span class="hidden sm:inline">{{ $t('users.access.button') }}</span></button>
+              <button class="btn btn-sm" @click="startEdit(u)">{{ $t('common.edit') }}</button>
+            </div></td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <Modal v-model:open="accessOpen" :title="$t('users.access.title', { name: accessUser?.displayName || accessUser?.username || '' })" wide>
+      <UserAccessTree v-if="accessUser" :user-id="accessUser.id" />
+      <template #footer>
+        <RouterLink class="btn mr-auto" to="/admin/grants" @click="accessUser = null">{{ $t('users.access.manage') }}</RouterLink>
+        <button class="btn" @click="accessUser = null">{{ $t('common.close') }}</button>
+      </template>
+    </Modal>
 
     <Modal v-model:open="createOpen" :title="$t('users.new')" :description="$t('users.newDesc')" wide>
       <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="create">

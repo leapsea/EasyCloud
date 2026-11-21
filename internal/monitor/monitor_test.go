@@ -34,9 +34,18 @@ func TestPebbleStoreAndQuery(t *testing.T) {
 	}
 
 	// Bucketing caps the number of points.
-	q, _ := Query(s, MetricCPU, base, base.Add(2*time.Minute), 4)
-	if len(q) > 4 || len(q) == 0 {
-		t.Fatalf("bucketed %d", len(q))
+	q, step, _ := Query(s, MetricCPU, base, base.Add(2*time.Minute), 4)
+	if len(q) > 4 || len(q) == 0 || step != 30 {
+		t.Fatalf("bucketed %d step %d", len(q), step)
+	}
+	// Averages, even when there are fewer points than maxPoints (sparse data).
+	q, step, _ = Query(s, MetricCPU, base, base.Add(2*time.Minute), 100)
+	if step != 5 || len(q) != 24 {
+		t.Fatalf("raw step: %d points, step %d", len(q), step)
+	}
+	q, step, _ = Query(s, MetricCPU, base, base.Add(10*time.Minute), 20) // 30 s buckets
+	if step != 30 || len(q) != 4 || q[0].Avg != 2.5 || q[0].Count != 6 || q[0].T%30 != 0 {
+		t.Fatalf("30s buckets: %+v (step %d)", q, step)
 	}
 
 	// Prune removes old raw data but keeps aggregates.

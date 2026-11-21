@@ -37,6 +37,19 @@ function subjectLabel(g: { subjectType: string; subjectId: string }) {
 }
 const filterLabel = computed(() => filter.value.type ? subjectLabel({ subjectType: filter.value.type, subjectId: filter.value.id! }) : '')
 
+// Grants grouped by subject (users first, then departments), each group sorted by folder.
+const grouped = computed(() => {
+  const m = new Map<string, { key: string; type: string; label: string; items: Grant[] }>()
+  for (const g of grants.value) {
+    const key = `${g.subjectType}:${g.subjectId}`
+    if (!m.has(key)) m.set(key, { key, type: g.subjectType, label: subjectLabel(g), items: [] })
+    m.get(key)!.items.push(g)
+  }
+  const list = [...m.values()]
+  list.forEach((x) => x.items.sort((a, b) => a.path.localeCompare(b.path)))
+  return list.sort((a, b) => (a.type === b.type ? a.label.localeCompare(b.label) : a.type === 'user' ? -1 : 1))
+})
+
 const newOpen = ref(false)
 const pickerOpen = ref(false)
 const form = ref({ subject: '', path: '/', perm: 'rw' })
@@ -69,15 +82,19 @@ const isHome = (g: Grant) => g.subjectType === 'user' && g.path === `/user/${use
       <p v-if="!grants.length" class="muted p-10 text-center text-sm">{{ $t('grants.none') }}</p>
       <table v-else class="w-full text-sm">
         <thead class="muted sticky top-0 whitespace-nowrap bg-[var(--surface)] text-left text-xs">
-          <tr class="border-b border-[var(--border)]"><th class="px-4 py-2">{{ $t('grants.col.folder') }}</th><th class="px-2">{{ $t('grants.col.subject') }}</th><th class="px-2">{{ $t('grants.col.perm') }}</th><th class="hidden px-2 md:table-cell">{{ $t('audit.col.time') }}</th><th /></tr>
+          <tr class="border-b border-[var(--border)]"><th class="px-4 py-2">{{ $t('grants.col.folder') }}</th><th class="px-2">{{ $t('grants.col.perm') }}</th><th class="hidden px-2 md:table-cell">{{ $t('audit.col.time') }}</th><th /></tr>
         </thead>
-        <tbody>
-          <tr v-for="g in grants" :key="g.id" class="border-b border-[var(--border)] last:border-0">
-            <td class="px-4 py-2.5 font-mono text-xs">
+        <tbody v-for="grp in grouped" :key="grp.key">
+          <tr class="border-b border-[var(--border)] bg-[var(--surface-sunken)]">
+            <td colspan="4" class="px-4 py-2 font-medium">
+              <span class="inline-flex items-center gap-1.5"><Building2 v-if="grp.type === 'group'" class="h-4 w-4 text-brand-600" :stroke-width="1.75" /><UserRound v-else class="h-4 w-4 text-[var(--text-muted)]" :stroke-width="1.75" />{{ grp.label }}<span class="muted text-xs font-normal">· {{ grp.items.length }}</span></span>
+            </td>
+          </tr>
+          <tr v-for="g in grp.items" :key="g.id" class="border-b border-[var(--border)] last:border-0">
+            <td class="py-2.5 pl-9 pr-4 font-mono text-xs">
               <RouterLink class="hover:underline" :to="{ path: '/files', query: { path: g.path } }">{{ g.path }}</RouterLink>
               <span v-if="isHome(g)" class="muted ml-1 font-sans">({{ $t('quota.personal') }})</span>
             </td>
-            <td class="px-2"><span class="inline-flex items-center gap-1.5"><Building2 v-if="g.subjectType === 'group'" class="h-4 w-4 text-brand-600" :stroke-width="1.75" /><UserRound v-else class="h-4 w-4 text-[var(--text-muted)]" :stroke-width="1.75" />{{ subjectLabel(g) }}</span></td>
             <td class="px-2"><span class="badge" :class="g.perm === 'rw' ? 'badge-success' : 'badge-warning'">{{ g.perm === 'rw' ? $t('grants.rw') : $t('files.readOnly') }}</span></td>
             <td class="muted hidden px-2 text-xs md:table-cell">{{ formatTime(g.createdAt) }}</td>
             <td class="px-4 text-right"><button class="btn btn-danger btn-sm" @click="del(g)">{{ $t('grants.revoke') }}</button></td>

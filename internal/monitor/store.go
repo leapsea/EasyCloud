@@ -45,7 +45,7 @@ type Point struct {
 	Avg   float64 `json:"v"`
 	Min   float64 `json:"min"`
 	Max   float64 `json:"max"`
-	Count uint32  `json:"-"`
+	Count uint32  `json:"n"` // samples averaged (lets clients fold live samples in)
 }
 
 // MetricStore is the persistence contract; Pebble is one implementation.

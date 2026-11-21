@@ -164,6 +164,24 @@ func TestCrossUserMatrix(t *testing.T) {
 	}
 	e.write("user/bob/private.txt", "bob's")
 
+	// The access view lists bob's own and inherited department grants.
+	_, acc := admin.do("GET", "/api/admin/users/"+ub["id"].(string)+"/access", nil)
+	var got []string
+	for _, it := range acc["items"].([]any) {
+		m := it.(map[string]any)
+		src := m["subjectType"].(string)
+		if gn, _ := m["groupName"].(string); gn != "" {
+			src += ":" + gn
+		}
+		got = append(got, fmt.Sprintf("%s %s %s %v", m["path"], m["perm"], src, m["exists"]))
+	}
+	if acc["admin"] != false || strings.Join(got, "|") != "/share/BB r group:研发部 true|/user/bob rw user true" {
+		t.Fatalf("bob access: %v / %v", got, acc["admin"])
+	}
+	if code, _ := admin.do("GET", "/api/admin/users/nope/access", nil); code != 404 {
+		t.Fatalf("unknown user access: %d", code)
+	}
+
 	alice, bob := e.client(), e.client()
 	alice.login("alice", "alicepass1")
 	bob.login("bob", "bobpass12")

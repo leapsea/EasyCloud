@@ -177,35 +177,39 @@ func (c *Collector) prune(ctx context.Context) {
 	}
 }
 
-// Query picks a granularity for the range and buckets the result to at most maxPoints.
-func Query(s MetricStore, id MetricID, from, to time.Time, maxPoints int) ([]Point, error) {
-	g := Raw
+// Query picks a granularity for the range and averages it into fixed time
+// buckets of span/maxPoints (at least the granularity), always — not only
+// when there are many points: a mostly empty range would otherwise return
+// raw samples for the stretches that have data, which draw as dense spikes.
+// Buckets are aligned to multiples of step since the epoch, so a client can
+// fold live samples into the same buckets. Returns the points and the step.
+func Query(s MetricStore, id MetricID, from, to time.Time, maxPoints int) ([]Point, int64, error) {
+	g, minStep := Raw, int64(5)
 	if to.Sub(from) > 6*time.Hour {
-		g = Minute
-	}
-	pts, err := s.Range(id, g, from, to)
-	if err != nil || len(pts) <= maxPoints {
-		return pts, err
+		g, minStep = Minute, 60
 	}
 	span := to.Unix() - from.Unix()
-	bucket := (span + int64(maxPoints) - 1) / int64(maxPoints)
+	step := max((span+int64(maxPoints)-1)/int64(maxPoints), minStep)
+	pts, err := s.Range(id, g, from, to)
+	if err != nil {
+		return nil, step, err
+	}
 	var out []Point
 	var cur []Point
-	start := pts[0].T - (pts[0].T-from.Unix())%bucket
+	start := int64(-1)
 	for _, p := range pts {
-		for p.T >= start+bucket {
-			if len(cur) > 0 {
-				out = append(out, Aggregate(start, cur))
-				cur = cur[:0]
-			}
-			start += bucket
+		b := p.T - p.T%step
+		if b != start && len(cur) > 0 {
+			out = append(out, Aggregate(start, cur))
+			cur = cur[:0]
 		}
+		start = b
 		cur = append(cur, p)
 	}
 	if len(cur) > 0 {
 		out = append(out, Aggregate(start, cur))
 	}
-	return out, nil
+	return out, step, nil
 }
 
 // HostInfo is static-ish information for the dashboard header.

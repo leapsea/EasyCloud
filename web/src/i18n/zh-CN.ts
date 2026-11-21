@@ -671,6 +671,21 @@ export default {
     "subtitle": "到期后自动永久删除"
   },
   "users": {
+    "access": {
+      "admin": "管理员可读写全部文件，下面仅列出单独授予的目录。",
+      "button": "文件权限",
+      "direct": "直接授权",
+      "help": "子目录继承上级目录的权限；「仅路径」表示只能看到通往授权目录的路径，看不到其中的其他文件。",
+      "inherited": "继承上级",
+      "manage": "管理授权",
+      "missing": "目录不存在",
+      "none": "该用户没有任何目录权限",
+      "pathOnly": "仅路径",
+      "r": "只读",
+      "rw": "读写",
+      "title": "{name} 的文件权限",
+      "viaGroup": "部门：{name}"
+    },
     "col": {
       "created": "创建时间",
       "groups": "部门",

@@ -626,6 +626,27 @@ func (s *Service) GrantsFor(ctx context.Context, userID string) ([]pathguard.Gra
 	}
 	s.cacheMu.Unlock()
 
+	rows, err := s.grantRows(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]pathguard.Grant, 0, len(rows))
+	for _, g := range rows {
+		p, err := pathguard.Parse(g.Path)
+		if err != nil {
+			continue
+		}
+		out = append(out, pathguard.Grant{Path: p, Perm: g.Perm})
+	}
+	s.cacheMu.Lock()
+	s.cache[userID] = cachedGrants{grants: out, at: time.Now()}
+	s.cacheMu.Unlock()
+	return out, nil
+}
+
+// grantRows returns the grant rows that apply to a user: their own and those
+// of their departments and every ancestor department.
+func (s *Service) grantRows(ctx context.Context, userID string) ([]Grant, error) {
 	groups, err := s.r.listGroups(ctx)
 	if err != nil {
 		return nil, err
@@ -652,21 +673,48 @@ func (s *Service) GrantsFor(ctx context.Context, userID string) ([]pathguard.Gra
 			args = append(args, g)
 		}
 	}
-	rows, err := s.r.listGrants(ctx, where, args...)
+	return s.r.listGrants(ctx, where, args...)
+}
+
+// AccessEntry is one grant that applies to a user, with where it comes from.
+type AccessEntry struct {
+	Grant
+	GroupName string `json:"groupName,omitempty"` // for department grants
+	Exists    bool   `json:"exists"`              // the folder is present on disk
+}
+
+// AccessOf lists every grant a user holds, directly or through departments
+// (administrators reach everything regardless; the caller says so).
+func (s *Service) AccessOf(ctx context.Context, userID string) ([]AccessEntry, error) {
+	if _, err := s.r.userBy(ctx, "id", userID); err != nil {
+		return nil, err
+	}
+	rows, err := s.grantRows(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]pathguard.Grant, 0, len(rows))
-	for _, g := range rows {
-		p, err := pathguard.Parse(g.Path)
-		if err != nil {
-			continue
-		}
-		out = append(out, pathguard.Grant{Path: p, Perm: g.Perm})
+	groups, err := s.r.listGroups(ctx)
+	if err != nil {
+		return nil, err
 	}
-	s.cacheMu.Lock()
-	s.cache[userID] = cachedGrants{grants: out, at: time.Now()}
-	s.cacheMu.Unlock()
+	names := map[string]string{}
+	for _, g := range groups {
+		names[g.ID] = g.Name
+	}
+	out := make([]AccessEntry, 0, len(rows))
+	for _, g := range rows {
+		e := AccessEntry{Grant: g}
+		if g.SubjectType == SubjectGroup {
+			e.GroupName = names[g.SubjectID]
+		}
+		if p, err := pathguard.Parse(g.Path); err == nil {
+			rel := p.String()
+			if fi, err := s.dataRoot.Stat(rel); err == nil && fi.IsDir() {
+				e.Exists = true
+			}
+		}
+		out = append(out, e)
+	}
 	return out, nil
 }
 

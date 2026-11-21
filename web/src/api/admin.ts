@@ -8,8 +8,9 @@ export interface Group { id: string; name: string; parentId?: string; createdAt:
 export interface Grant {
   id: string; subjectType: 'user' | 'group'; subjectId: string; path: string; perm: 'r' | 'rw'; createdBy: string; createdAt: string
 }
+export interface AccessEntry extends Grant { groupName?: string; exists: boolean }
 export interface AuditEntry { id: number; at: string; userId: string; username: string; action: string; path: string; detail: string; ip: string }
-export interface MetricPoint { t: number; v: number; min: number; max: number }
+export interface MetricPoint { t: number; v: number; min: number; max: number; n?: number }
 export interface SystemInfo {
   host: { hostname: string; os: string; platform: string; arch: string; cpus: number; memTotal: number; uptimeSec: number
     diskTotal: number; diskUsed: number; diskFree: number; diskFs: string; load1: number }
@@ -26,6 +27,7 @@ export const adminApi = {
     request<User>('PATCH', `/api/admin/users/${id}`, patch),
   deleteUser: (id: string) => request<void>('DELETE', `/api/admin/users/${id}`),
   resetPassword: (id: string, password: string) => request<void>('POST', `/api/admin/users/${id}/password`, { password }),
+  userAccess: (id: string) => request<{ admin: boolean; items: AccessEntry[] }>('GET', `/api/admin/users/${id}/access`),
   resetTwoFactor: (id: string) => request<void>('POST', `/api/admin/users/${id}/2fa/reset`),
 
   groups: () => request<{ items: Group[] }>('GET', '/api/admin/groups'),
@@ -45,6 +47,6 @@ export const adminApi = {
     return request<{ items: AuditEntry[] }>('GET', `/api/admin/audit?${qs(p)}`)
   },
   metrics: (metrics: string[], range: string) =>
-    request<{ from: number; to: number; series: Record<string, MetricPoint[]> }>('GET', `/api/admin/metrics?${qs({ metric: metrics.join(','), range })}`),
+    request<{ from: number; to: number; step: number; series: Record<string, MetricPoint[]> }>('GET', `/api/admin/metrics?${qs({ metric: metrics.join(','), range })}`),
   system: () => request<SystemInfo>('GET', '/api/admin/system'),
 }

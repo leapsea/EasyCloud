@@ -671,6 +671,21 @@ export default {
     "subtitle": "Items are deleted permanently when they expire"
   },
   "users": {
+    "access": {
+      "admin": "Administrators can read and write every file; only explicitly granted folders are listed below.",
+      "button": "Folders",
+      "direct": "Direct",
+      "help": "Subfolders inherit their parent's permission. \"Path only\" folders just lead to a granted folder; their other contents stay hidden.",
+      "inherited": "Inherited",
+      "manage": "Manage grants",
+      "missing": "Missing",
+      "none": "This user has no folder access",
+      "pathOnly": "Path only",
+      "r": "Read only",
+      "rw": "Read/write",
+      "title": "Folder access of {name}",
+      "viaGroup": "Dept: {name}"
+    },
     "col": {
       "created": "Created",
       "groups": "Departments",

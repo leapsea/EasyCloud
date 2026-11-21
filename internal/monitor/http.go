@@ -30,15 +30,17 @@ func MountAdmin(r chi.Router, store MetricStore, c *Collector, extra func(r *htt
 		from := to.Add(-dur)
 		points, _ := strconv.Atoi(q.Get("points"))
 		if points <= 0 || points > 2000 {
-			points = 360
+			points = 180 // a few pixels per point on a dashboard card: averages, not jitter
 		}
 		out := map[string][]Point{}
+		var step int64
 		for _, name := range strings.Split(q.Get("metric"), ",") {
 			id, ok := MetricNames[strings.TrimSpace(name)]
 			if !ok {
 				return errs.ErrInvalidInput.WithDetail("unknown metric " + name)
 			}
-			pts, err := Query(store, id, from, to, points)
+			pts, st, err := Query(store, id, from, to, points)
+			step = st
 			if err != nil {
 				return err
 			}
@@ -47,7 +49,7 @@ func MountAdmin(r chi.Router, store MetricStore, c *Collector, extra func(r *htt
 			}
 			out[name] = pts
 		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"from": from.Unix(), "to": to.Unix(), "series": out})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"from": from.Unix(), "to": to.Unix(), "step": step, "series": out})
 		return nil
 	}).With(log))
 
