@@ -28,8 +28,11 @@ jobs:
       - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
       # Short run on every push; new findings show up within seconds, and the
-      # corpus keeps the regression cases.
-      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=10s ./internal/pathguard
+      # corpus keeps the regression cases. Bounded by executions, not time: a
+      # time limit that expires while a worker is minimizing a new input makes
+      # `go test` fail with a bare "context deadline exceeded" (no crasher),
+      # which happens on busy CI runners.
+      - run: go test -run=^$ -fuzz=FuzzParse -fuzztime=500000x -fuzzminimizetime=5s ./internal/pathguard
       - name: Script syntax
         run: sh -n deploy/install.sh && bash -n scripts/build-plugins.sh && sh -n deploy/docker/entrypoint.sh
       - name: Changed plugins have a new version
