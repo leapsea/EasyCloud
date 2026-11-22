@@ -5,6 +5,8 @@
 #   tag v1.2.3-rc.1   -> :1.2.3-rc.1
 # :latest follows main only, so tagging an older commit never moves it back.
 # The image name is lower-cased by metadata-action (GHCR requires it).
+# The binaries (with the app version) come from image-build.yml, which the
+# caller runs in parallel with the tests and lists in "needs" of this job.
 name: image
 on:
   workflow_call:
@@ -18,13 +20,16 @@ jobs:
     concurrency: { group: "image-${{ github.ref }}", cancel-in-progress: false }
     steps:
       - uses: actions/checkout@v5
-      # Plugin compatibility checks treat dev-* as a development build; a branch
-      # name such as "main" is not semver and would make every engine check fail.
-      - name: App version
-        id: ver
-        run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then v=${GITHUB_REF_NAME#v}; else v=dev-${GITHUB_SHA::7}; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
+      # Moved to image-build.yml, where the binary is compiled:
+      # - name: App version
+      #   id: ver
+      #   run: |
+      #     if [ "$GITHUB_REF_TYPE" = tag ]; then v=${GITHUB_REF_NAME#v}; else v=dev-${GITHUB_SHA::7}; fi
+      #     echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with: { name: image-binaries, path: .ci-bin }
+      # Artifacts do not keep file modes.
+      - run: chmod +x .ci-bin/*/easycloud && ls -l .ci-bin/*
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -43,16 +48,22 @@ jobs:
         with:
           context: .
           file: deploy/docker/Dockerfile
-          # web and Go stages cross-compile on the build platform; only the final
-          # "apk add" runs under QEMU for arm64
+          # Prebuilt binaries: the web and Go stages are skipped; only the final
+          # "apk add" runs under QEMU for arm64, normally a cache hit.
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           # org.opencontainers.image.source links the package to this repository
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ steps.ver.outputs.version }}
+          build-args: BINARY_FROM=prebuilt
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Only the final stage is built, so "min" keeps all that is reused.
+          cache-to: type=gha,mode=min
+          # Before prebuilt binaries (web and Go compiled inside the image build):
+          # # web and Go stages cross-compile on the build platform; only the final
+          # # "apk add" runs under QEMU for arm64
+          # build-args: VERSION=${{ steps.ver.outputs.version }}
+          # cache-to: type=gha,mode=max
       - name: Anonymous pull works
         run: |
           docker logout ghcr.io

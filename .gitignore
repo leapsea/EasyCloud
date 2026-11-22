@@ -7,3 +7,4 @@ web/dist/*
 /.dev/
 /dist/
 .gitlab-ci.yml
+/.ci-bin/

@@ -47,7 +47,16 @@ jobs:
           # install.sh is fetched from releases/latest: only app releases may be "latest".
           make_latest: ${{ !contains(github.ref_name, '-') }}
 
+  # Compiles the image contents in parallel with the tests (see ci.yml).
+  image-build:
+    uses: ./.github/workflows/image-build.yml
+
   image:
-    needs: test
+    needs: [test, image-build]
     permissions: { contents: read, packages: write }
     uses: ./.github/workflows/image.yml
+  # Before the parallel image-build:
+  # image:
+  #   needs: test
+  #   permissions: { contents: read, packages: write }
+  #   uses: ./.github/workflows/image.yml

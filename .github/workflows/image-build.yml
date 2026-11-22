@@ -1,0 +1,62 @@
+# Compiles what goes into the image, in parallel with the tests: the web UI and
+# the Go binary for every image platform, uploaded as the "image-binaries"
+# artifact. image.yml (run only after the tests pass) packs them into the image
+# with deploy/docker/Dockerfile and BINARY_FROM=prebuilt, so publishing waits for
+# the tests but no longer compiles after them.
+# Reused by ci.yml (main branch) and release.yml (tags v*). App version:
+#   main branch push -> dev-<short sha>      tag v1.2.3 -> 1.2.3
+name: image-build
+on:
+  workflow_call:
+
+permissions: { contents: read }
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Plugin compatibility checks treat dev-* as a development build; a branch
+      # name such as "main" is not semver and would make every engine check fail.
+      - name: App version
+        id: ver
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v=${GITHUB_REF_NAME#v}; else v=dev-${GITHUB_SHA::7}; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      # web/dist is embedded into the binary, so it is built first.
+      - name: Web UI
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: web
+      # setup-go's own cache is keyed on go.sum only and is never saved again
+      # while that key exists, so it goes stale as the code changes. This one is
+      # saved on every run (key includes the commit) and restores the newest.
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod, cache: false }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-image-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-image-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+            go-image-${{ runner.os }}-
+      # Same flags as the "build" stage of the Dockerfile. Pure Go
+      # (CGO_ENABLED=0) cross-compiles at native speed.
+      - name: Go binaries
+        env: { VERSION: "${{ steps.ver.outputs.version }}" }
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X main.version=$VERSION" -o ".ci-bin/linux-$arch/easycloud" ./cmd/easycloud
+          done
+          ls -l .ci-bin/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-binaries
+          path: .ci-bin/
+          retention-days: 1
+          if-no-files-found: error
+          include-hidden-files: true # .ci-bin starts with a dot

@@ -38,8 +38,21 @@ jobs:
           if echo "$files" | grep -Evq '^(plugins/|docs/|\.github/workflows/plugins\.yml$)|\.md$'; then app=true; else app=false; fi
           echo "app=$app" >> "$GITHUB_OUTPUT"
 
+  # Compiles the image contents while the tests run; image only packs and pushes
+  # them once the tests pass, so a failing commit still publishes nothing.
+  image-build:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    uses: ./.github/workflows/image-build.yml
+
   image:
-    needs: [test, changes]
+    needs: [test, changes, image-build]
     if: needs.changes.outputs.app == 'true'
     permissions: { contents: read, packages: write }
     uses: ./.github/workflows/image.yml
+  # Before the parallel image-build (compiled after the tests):
+  # image:
+  #   needs: [test, changes]
+  #   if: needs.changes.outputs.app == 'true'
+  #   permissions: { contents: read, packages: write }
+  #   uses: ./.github/workflows/image.yml
