@@ -10,7 +10,9 @@ const { t } = useI18n()
 
 // Runs a viewer plugin in an opaque-origin sandbox: it gets a short-lived
 // capability URL for this one file and nothing else (no cookies, no app access).
-const props = defineProps<{ entry: FileEntry | null; plugin: ViewerPlugin | null }>()
+// resolveUrl: where the capability URL comes from (default: the signed-in
+// token endpoint; the public share page passes its share-scoped one).
+const props = defineProps<{ entry: FileEntry | null; plugin: ViewerPlugin | null; resolveUrl?: (path: string) => Promise<{ url: string }> }>()
 const emit = defineEmits<{ close: []; download: [e: FileEntry] }>()
 const open = ref(false)
 const frame = ref<HTMLIFrameElement>()
@@ -25,7 +27,7 @@ async function onMessage(ev: MessageEvent) {
   if (m?.source !== 'easycloud-viewer' || !props.entry || !props.plugin) return
   if (m.type === 'loaded') {
     try {
-      const { url } = await fileToken(props.entry.path)
+      const { url } = await (props.resolveUrl ?? fileToken)(props.entry.path)
       const dark = useTheme().dark.value
       frame.value.contentWindow!.postMessage({
         type: 'init', entry: props.plugin.entry, theme: dark ? 'dark' : 'light',

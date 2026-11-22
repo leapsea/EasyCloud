@@ -176,6 +176,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Server, er
 	dav := webdav.NewService(db, root)
 	files.AddObserver(dav)
 	shareHTTP := share.NewHTTP(shares, signer, thumbs, rec, log)
+	shareHTTP.SetViewers(func() any { return plugins.Viewers() })
 	tasks := transfer.NewTaskManager(db, files,
 		func(ctx context.Context, uid string) (pathguard.Subject, bool) {
 			u, err := ids.GetUser(ctx, uid)

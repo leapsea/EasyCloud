@@ -539,6 +539,7 @@ export default {
     "from": "来自 {owner}",
     "left": "剩余 {n} 次下载",
     "notFound": "分享不存在",
+    "preview": "在线预览",
     "sharedBy": "{owner} 分享了「{name}」",
     "unlock": "提取",
     "zipFolder": "打包下载此文件夹"

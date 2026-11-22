@@ -539,6 +539,7 @@ export default {
     "from": "From {owner}",
     "left": "{n} download(s) left",
     "notFound": "This share does not exist",
+    "preview": "Preview",
     "sharedBy": "{owner} shared \"{name}\"",
     "unlock": "Unlock",
     "zipFolder": "Download this folder as zip"

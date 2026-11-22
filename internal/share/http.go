@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,12 +21,26 @@ import (
 const unlockTTL = 12 * time.Hour
 
 type HTTP struct {
-	svc    *Service
-	signer *filetoken.Signer
-	thumbs *thumb.Service
-	audit  *audit.Recorder
-	log    *slog.Logger
+	svc     *Service
+	signer  *filetoken.Signer
+	thumbs  *thumb.Service
+	audit   *audit.Recorder
+	log     *slog.Logger
+	viewers func() any // enabled viewer plugins, offered to visitors for previews
 }
+
+// SetViewers supplies the viewer plugins a visitor may preview files with.
+func (h *HTTP) SetViewers(f func() any) { h.viewers = f }
+
+// previewTokenTTL bounds a viewer plugin's capability URL for a share.
+const previewTokenTTL = 30 * time.Minute
+
+// ErrNoPreview: shares with a download limit are download-only, because a
+// preview streams the same bytes and would either consume the limit on every
+// play or bypass it.
+var ErrNoPreview = errs.New(403, "SHARE_PREVIEW_DISABLED")
+
+func previewAllowed(a Access) bool { return a.Share.MaxDownloads <= 0 }
 
 func NewHTTP(svc *Service, signer *filetoken.Signer, thumbs *thumb.Service, rec *audit.Recorder, log *slog.Logger) *HTTP {
 	return &HTTP{svc: svc, signer: signer, thumbs: thumbs, audit: rec, log: log}
@@ -95,6 +110,7 @@ func (h *HTTP) MountPublic(r chi.Router) {
 		s.Post("/unlock", httpx.Handler(h.unlock).With(h.log))
 		s.Get("/list", httpx.Handler(h.list).With(h.log))
 		s.Get("/download", httpx.Handler(h.download).With(h.log))
+		s.Post("/token", httpx.Handler(h.previewToken).With(h.log))
 		s.Get("/zip", httpx.Handler(h.zip).With(h.log))
 		s.Get("/thumb", httpx.Handler(h.thumb).With(h.log))
 	})
@@ -140,6 +156,9 @@ type metaResp struct {
 	HasPassword   bool      `json:"hasPassword"`
 	Unlocked      bool      `json:"unlocked"`
 	DownloadsLeft int       `json:"downloadsLeft"` // -1 = unlimited
+	// Preview: files may be opened online (only shares without a download limit).
+	Preview bool `json:"preview"`
+	Viewers any  `json:"viewers,omitempty"`
 }
 
 func (h *HTTP) meta(w http.ResponseWriter, r *http.Request) error {
@@ -151,6 +170,12 @@ func (h *HTTP) meta(w http.ResponseWriter, r *http.Request) error {
 		ExpireAt: a.Share.ExpireAt, HasPassword: a.Share.HasPassword, Unlocked: err == nil, DownloadsLeft: -1}
 	if a.Share.MaxDownloads > 0 {
 		m.DownloadsLeft = a.Share.MaxDownloads - a.Share.Downloads
+	}
+	if err == nil && previewAllowed(a) {
+		m.Preview = true
+		if h.viewers != nil {
+			m.Viewers = h.viewers()
+		}
 	}
 	if err == nil && !a.Share.IsDir {
 		if e, err := h.svc.files.Stat(r.Context(), a.Subject(), a.Share.Path); err == nil {
@@ -249,11 +274,16 @@ func (h *HTTP) download(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer f.Close()
-	if err := h.consume(r, a, e.Path); err != nil {
-		return err
+	inline := r.URL.Query().Get("inline") == "1"
+	// Online previews (players fetch from the start again and again) are not
+	// downloads; they are only offered where there is no download limit.
+	if !(inline && previewAllowed(a)) {
+		if err := h.consume(r, a, e.Path); err != nil {
+			return err
+		}
 	}
 	disp := "attachment"
-	if r.URL.Query().Get("inline") == "1" {
+	if inline {
 		disp = "inline"
 	}
 	hd := w.Header()
@@ -266,6 +296,39 @@ func (h *HTTP) download(w http.ResponseWriter, r *http.Request) error {
 		hd.Set("Content-Type", "application/octet-stream")
 	}
 	http.ServeContent(w, r, e.Name, e.ModTime, f)
+	return nil
+}
+
+// previewToken issues a short-lived capability URL (/api/raw/...) for one file
+// of the share, for a viewer plugin running in an opaque-origin sandbox that
+// cannot send the visitor's cookie.
+func (h *HTTP) previewToken(w http.ResponseWriter, r *http.Request) error {
+	a, err := h.open(r)
+	if err != nil {
+		return err
+	}
+	if !previewAllowed(a) {
+		return ErrNoPreview
+	}
+	var in struct {
+		Path string `json:"path"`
+	}
+	if err := httpx.DecodeJSON(r, &in); err != nil {
+		return err
+	}
+	p, err := a.Within(in.Path)
+	if err != nil {
+		return err
+	}
+	e, err := h.svc.files.Stat(r.Context(), a.Subject(), p)
+	if err != nil {
+		return err
+	}
+	if e.IsDir {
+		return errs.ErrInvalidInput.WithDetail("not a file")
+	}
+	tok := h.signer.Issue(filetoken.Claims{UserID: a.Owner.ID, Path: e.Path, Purpose: "raw"}, previewTokenTTL)
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"url": "/api/raw/" + tok + "/" + url.PathEscape(e.Name), "expiresIn": int(previewTokenTTL.Seconds())})
 	return nil
 }
 
