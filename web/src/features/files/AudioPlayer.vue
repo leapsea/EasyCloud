@@ -44,28 +44,69 @@ watch([volume, muted, rate], () => {
 let ctx: AudioContext | undefined
 let analyser: AnalyserNode | undefined
 let freq: Uint8Array<ArrayBuffer> | undefined
-// Once the element is routed into an AudioContext, it is heard only through
-// it: so the element is connected only after the context is confirmed
-// running. A context the browser keeps suspended (no user gesture) is
-// dropped and the audio plays directly, without spectrum, until the next
-// click on play.
+// Spectrum source. Preferred: a side tap with captureStream() (Chromium) —
+// the <audio> element keeps playing through its own output, untouched, and
+// the analyser only listens. Routing playback through Web Audio instead
+// (createMediaElementSource) adds a buffer to the audible path: after a seek
+// the browser still plays out audio decoded before it (~40 ms in Chrome,
+// clearly audible in Safari), heard as the old passage repeating. That route
+// is kept only where captureStream is missing (Safari, Firefox — whose
+// mozCaptureStream would silence the element), with a gate that mutes across
+// each seek until the stale audio has drained.
+//
+// Routed playback is heard only through the context, so the element is
+// connected only once the context is confirmed running; a context the browser
+// keeps suspended (no user gesture) is dropped and the audio plays directly.
+let gate: GainNode | undefined
 async function ensureGraph() {
-  if (!audio.value) return
+  const el = audio.value
+  if (!el) return
   if (ctx) { if (ctx.state === 'suspended') await ctx.resume().catch(() => {}); return }
   let c: AudioContext | undefined
   try {
     c = new AudioContext()
     if (c.state !== 'running') await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 300))])
     if (c.state !== 'running') { c.close().catch(() => {}); return }
-    const source = c.createMediaElementSource(audio.value)
-    analyser = c.createAnalyser()
-    analyser.fftSize = 2048
-    analyser.smoothingTimeConstant = 0.78
-    source.connect(analyser)
-    analyser.connect(c.destination)
-    freq = new Uint8Array(analyser.frequencyBinCount)
+    const an = c.createAnalyser()
+    an.fftSize = 2048
+    an.smoothingTimeConstant = 0.78
+    const capture = (el as HTMLAudioElement & { captureStream?: () => MediaStream }).captureStream
+    if (typeof capture === 'function') {
+      c.createMediaStreamSource(capture.call(el)).connect(an)
+      const sink = c.createGain() // keeps the analyser pulled; adds nothing audible
+      sink.gain.value = 0
+      an.connect(sink).connect(c.destination)
+    } else {
+      gate = c.createGain()
+      c.createMediaElementSource(el).connect(an)
+      an.connect(gate).connect(c.destination)
+    }
+    analyser = an
+    freq = new Uint8Array(an.frequencyBinCount)
     ctx = c
-  } catch { analyser = undefined; c?.close().catch(() => {}) } // no spectrum, plain playback
+  } catch { analyser = undefined; gate = undefined; c?.close().catch(() => {}) } // no spectrum, plain playback
+}
+
+// Seek gate (routed playback only): silent from "seeking" until a short while
+// after "seeked", then a quick fade-in, so the stale audio is never heard.
+const STALE_MS = 180
+let gateTimer: number | undefined
+function onSeeking() {
+  if (!gate || !ctx) return
+  clearTimeout(gateTimer)
+  gate.gain.cancelScheduledValues(ctx.currentTime)
+  gate.gain.setValueAtTime(0, ctx.currentTime)
+}
+function onSeeked() {
+  if (!gate || !ctx) return
+  clearTimeout(gateTimer)
+  gateTimer = window.setTimeout(() => {
+    if (!gate || !ctx) return
+    const now = ctx.currentTime
+    gate.gain.cancelScheduledValues(now)
+    gate.gain.setValueAtTime(0, now)
+    gate.gain.linearRampToValueAtTime(1, now + 0.04)
+  }, STALE_MS)
 }
 
 // Opening a track plays it. Browsers may refuse playback with sound that does
@@ -85,8 +126,16 @@ async function toggle() {
 }
 // Skip step of the ⟲/⟳ buttons, the system media controls and the arrow keys.
 const SKIP = 3
-function seekBy(d: number) { const a = audio.value; if (a) a.currentTime = Math.min(Math.max(0, a.currentTime + d), duration.value || a.currentTime + d) }
-function seekTo(e: Event) { const a = audio.value; if (a) a.currentTime = Number((e.target as HTMLInputElement).value) }
+// Every seek goes through here: the gate closes synchronously, before the
+// "seeking" event (dispatched asynchronously) would.
+function seekAt(time: number) {
+  const a = audio.value
+  if (!a) return
+  onSeeking()
+  a.currentTime = time
+}
+function seekBy(d: number) { const a = audio.value; if (a) seekAt(Math.min(Math.max(0, a.currentTime + d), duration.value || a.currentTime + d)) }
+function seekTo(e: Event) { seekAt(Number((e.target as HTMLInputElement).value)) }
 
 // Read the element from the event: the ref is already cleared when the
 // element fires its last events while the player unmounts.
@@ -173,7 +222,7 @@ function draw() {
 }
 function kick() { if (!raf && !props.mini) raf = requestAnimationFrame(draw) }
 watch(playing, kick)
-watch(() => props.mini, (m) => { if (m) { cancelAnimationFrame(raf); raf = 0 } else kick() })
+watch(() => props.mini, (m) => { if (m) { cancelAnimationFrame(raf); clearTimeout(gateTimer); raf = 0 } else kick() })
 
 // Media Session: title on the lock screen / system media controls, and the
 // hardware media keys work while the tab is in the background.
@@ -186,7 +235,7 @@ function setSession() {
     ms.setActionHandler('pause', () => audio.value?.pause())
     ms.setActionHandler('seekbackward', () => seekBy(-SKIP))
     ms.setActionHandler('seekforward', () => seekBy(SKIP))
-    ms.setActionHandler('seekto', (d) => { if (audio.value && d.seekTime !== undefined) audio.value.currentTime = d.seekTime })
+    ms.setActionHandler('seekto', (d) => { if (d.seekTime !== undefined) seekAt(d.seekTime) })
   } catch { /* unsupported action */ }
 }
 watch(playing, (p) => {
@@ -218,7 +267,7 @@ function onKey(e: KeyboardEvent) {
   <div class="w-full select-none outline-none" :class="mini ? '' : 'rounded-xl bg-[var(--surface-sunken)] p-4 sm:p-5'" tabindex="0" @keydown="onKey">
     <audio
       ref="audio" :src="src" preload="metadata"
-      @play="playing = true" @pause="playing = false" @ended="playing = false"
+      @play="playing = true" @pause="playing = false" @ended="playing = false" @seeking="onSeeking" @seeked="onSeeked"
       @timeupdate="onTime" @progress="onTime" @loadedmetadata="onMeta" @durationchange="onMeta" @error="error = true"
     />
     <!-- Minimized: play/pause and a thin progress bar. -->
