@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, watch } from 'vue'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import { useModalLayer } from './modalStack'
 
-defineProps<{ title: string; description?: string; wide?: boolean }>()
+// large: for editors that need room (two columns, a tree); taller as well.
+const props = defineProps<{ title: string; description?: string; wide?: boolean; large?: boolean }>()
 const open = defineModel<boolean>('open', { required: true })
 
 const layer = useModalLayer()
@@ -16,7 +17,7 @@ const level = computed(() => Math.max(0, layer.depth.value))
 const overlayStyle = computed(() => ({ zIndex: 40 + level.value * 10 }))
 const contentStyle = computed(() => ({
   zIndex: 41 + level.value * 10,
-  top: `${14 + level.value * 6}%`,
+  top: `${(props.large ? 6 : 14) + level.value * 6}%`,
   scale: layer.behind.value > 0 ? String(1 - 0.04 * layer.behind.value) : '1',
 }))
 </script>
@@ -29,8 +30,8 @@ const contentStyle = computed(() => ({
       </Transition>
       <Transition name="fade">
         <DialogContent
-          class="fixed left-1/2 flex max-h-[76vh] -translate-x-1/2 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_24px_64px_-16px_rgb(15_23_42/0.35)] outline-none transition-[scale,top] duration-200 ease-out"
-          :class="[wide ? 'w-[min(92vw,540px)]' : 'w-[min(92vw,420px)]', level > 0 && 'shadow-[0_32px_80px_-12px_rgb(15_23_42/0.5)]']"
+          class="fixed left-1/2 flex -translate-x-1/2 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_24px_64px_-16px_rgb(15_23_42/0.35)] outline-none transition-[scale,top] duration-200 ease-out"
+          :class="[large ? 'max-h-[88vh] w-[min(94vw,920px)]' : wide ? 'max-h-[76vh] w-[min(92vw,540px)]' : 'max-h-[76vh] w-[min(92vw,420px)]', level > 0 && 'shadow-[0_32px_80px_-12px_rgb(15_23_42/0.5)]']"
           :style="contentStyle"
         >
           <!-- Title and actions stay put; only the body scrolls when content is tall. -->

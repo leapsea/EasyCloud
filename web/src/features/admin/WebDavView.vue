@@ -2,12 +2,13 @@
 import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Copy, FolderPlus, HardDrive, KeyRound, Pencil, Plus, Trash2, TriangleAlert, X } from 'lucide-vue-next'
-import { davUrl, webdavApi, type DavConfig, type DavDir } from '@/api/webdav'
+import { Copy, Eye, FolderTree, HardDrive, KeyRound, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
+import { davUrl, webdavApi, type DavConfig } from '@/api/webdav'
 import { useToast } from '@/stores/toast'
 import Modal from '@/components/Modal.vue'
 import FileIcon from '@/components/FileIcon.vue'
-import FolderPicker from '@/features/files/FolderPicker.vue'
+import DavEditor from './DavEditor.vue'
+import { leafName, looksDir, toTree } from './davTree'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -34,78 +35,15 @@ async function toggle(c: DavConfig) {
 // ---- editor ----
 const editOpen = ref(false)
 const editing = ref<DavConfig | null>(null)
-const form = ref({ name: '', slug: '', username: '', password: '', enabled: true, dirs: [] as DavDir[] })
-const slugTouched = ref(false)
-const busy = ref(false)
-const picker = ref<{ open: boolean; index: number }>({ open: false, index: -1 })
-
-function startCreate() {
-  editing.value = null
-  slugTouched.value = false
-  form.value = { name: '', slug: '', username: '', password: '', enabled: true, dirs: [] }
-  editOpen.value = true
-}
-function startEdit(c: DavConfig) {
-  editing.value = c
-  slugTouched.value = true
-  form.value = { name: c.name, slug: c.slug, username: c.username, password: '', enabled: c.enabled, dirs: c.dirs.map((d) => ({ path: d.path, alias: d.alias, perm: d.perm })) }
-  editOpen.value = true
-}
-// Suggest a URL slug from the username until the slug is edited by hand.
-function onUsername() {
-  if (!slugTouched.value) form.value.slug = form.value.username.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32)
-}
-const slugOk = computed(() => /^[a-z0-9][a-z0-9-]{0,31}$/.test(form.value.slug))
-const userOk = computed(() => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/.test(form.value.username))
-const pwOk = computed(() => editing.value !== null || form.value.password === '' || form.value.password.length >= 8)
-
-// Folder names as clients will see them; duplicates need an alias.
-const displayName = (d: DavDir) => d.alias.trim() || (d.path === '/' ? 'data' : d.path.split('/').filter(Boolean).pop() ?? '')
-const clashes = computed(() => {
-  const seen = new Map<string, number>()
-  const bad = new Set<number>()
-  form.value.dirs.forEach((d, i) => {
-    const k = displayName(d).toLowerCase()
-    if (seen.has(k)) { bad.add(i); bad.add(seen.get(k)!) } else seen.set(k, i)
-  })
-  return bad
-})
-const canSave = computed(() => form.value.name.trim() && slugOk.value && userOk.value && pwOk.value && form.value.dirs.length > 0 && clashes.value.size === 0 && !busy.value)
-
-// Start where the user is most likely to continue: the folder being changed,
-// or next to the last folder added.
-const pickerStart = computed(() => {
-  if (picker.value.index >= 0) return form.value.dirs[picker.value.index]?.path ?? '/'
-  const last = form.value.dirs[form.value.dirs.length - 1]?.path
-  if (!last || last === '/') return '/'
-  return last.slice(0, last.lastIndexOf('/')) || '/'
-})
-function addDir() { picker.value = { open: true, index: -1 } }
-function changeDir(i: number) { picker.value = { open: true, index: i } }
-function onPick(path: string) {
-  if (picker.value.index >= 0) form.value.dirs[picker.value.index].path = path
-  else if (form.value.dirs.some((d) => d.path === path)) toast.info(t('toast.davDirExists'), path)
-  else form.value.dirs.push({ path, alias: '', perm: 'rw' })
+function startCreate() { editing.value = null; editOpen.value = true }
+function startEdit(c: DavConfig) { editing.value = c; editOpen.value = true }
+function onSaved(created: { item: DavConfig; password: string } | null) {
+  if (created) creds.value = { title: t('webdav.createdTitle', { name: created.item.name }), url: davUrl(created.item.slug), username: created.item.username, password: created.password }
+  else toast.success(t('toast.saved'), t('toast.davSavedD'))
+  load()
 }
 
 const creds = ref<{ title: string; url: string; username: string; password: string } | null>(null)
-async function save() {
-  busy.value = true
-  const body = { name: form.value.name, slug: form.value.slug, username: form.value.username, enabled: form.value.enabled,
-    dirs: form.value.dirs.map((d) => ({ path: d.path, alias: d.alias.trim(), perm: d.perm })), password: form.value.password || undefined }
-  try {
-    if (editing.value) {
-      await webdavApi.update(editing.value.id, body)
-      toast.success(t('toast.saved'), t('toast.davSavedD'))
-    } else {
-      const r = await webdavApi.create(body)
-      creds.value = { title: t('webdav.createdTitle', { name: r.item.name }), url: davUrl(r.item.slug), username: r.item.username, password: r.password }
-    }
-    editOpen.value = false
-    load()
-  } catch (e) { toast.error(e) } finally { busy.value = false }
-}
-
 const resetTarget = ref<DavConfig | null>(null)
 async function resetPassword() {
   const c = resetTarget.value!
@@ -116,6 +54,7 @@ async function resetPassword() {
   } catch (e) { toast.error(e) }
 }
 const delTarget = ref<DavConfig | null>(null)
+const viewTarget = ref<DavConfig | null>(null) // the account whose content is shown
 async function remove() {
   try { await webdavApi.remove(delTarget.value!.id); delTarget.value = null; toast.success(t('toast.davDeleted')); load() } catch (e) { toast.error(e) }
 }
@@ -138,7 +77,6 @@ async function remove() {
         <header class="flex items-start gap-3">
           <div class="min-w-0 flex-1">
             <p class="truncate font-medium">{{ c.name }}</p>
-            <p class="muted text-xs">{{ $t('webdav.dirCount', { n: c.dirs.length }) }}</p>
           </div>
           <button
             role="switch" :aria-checked="c.enabled" :title="c.enabled ? $t('webdav.disable') : $t('webdav.enable')"
@@ -160,18 +98,13 @@ async function remove() {
           </dd>
         </dl>
 
-        <p class="muted mt-4 text-xs font-medium">{{ $t('webdav.sharedDirs') }}</p>
-        <ul class="mt-1.5 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
-          <li v-for="d in c.dirs" :key="d.path" class="flex items-center gap-2 px-3 py-2 text-[13px]">
-            <FileIcon :entry="{ isDir: true, name: d.name ?? '' }" :size="16" />
-            <span class="font-medium">{{ d.name }}</span>
-            <span class="muted min-w-0 flex-1 truncate font-mono text-xs" :title="d.path">{{ d.path }}</span>
-            <span v-if="d.missing" class="badge badge-danger" :title="$t('webdav.missingHint')"><TriangleAlert class="h-3 w-3" />{{ $t('webdav.missing') }}</span>
-            <span class="badge" :class="d.perm === 'rw' ? 'badge-success' : 'badge-warning'">{{ d.perm === 'rw' ? $t('grants.rw') : $t('files.readOnly') }}</span>
-          </li>
-        </ul>
+        <p v-if="c.dirs.some((x) => x.missing)" class="mt-3 flex items-center gap-1.5 text-xs text-red-600">
+          <TriangleAlert class="h-3.5 w-3.5 shrink-0" />{{ $t('webdav.missingCount', { n: c.dirs.filter((x) => x.missing).length }) }}
+        </p>
 
-        <footer class="mt-4 flex gap-2">
+        <!-- Pinned to the bottom: cards in a row keep their buttons aligned. -->
+        <footer class="mt-auto flex flex-wrap gap-2 pt-4">
+          <button class="btn btn-sm" @click="viewTarget = c"><Eye class="h-3.5 w-3.5" />{{ $t('webdav.viewContent') }}</button>
           <button class="btn btn-sm" @click="startEdit(c)"><Pencil class="h-3.5 w-3.5" />{{ $t('common.edit') }}</button>
           <button class="btn btn-sm" @click="resetTarget = c"><KeyRound class="h-3.5 w-3.5" />{{ $t('users.resetPw') }}</button>
           <button class="btn btn-danger btn-sm ml-auto" @click="delTarget = c"><Trash2 class="h-3.5 w-3.5" />{{ $t('common.delete') }}</button>
@@ -179,56 +112,41 @@ async function remove() {
       </article>
     </div>
 
-    <Modal v-model:open="editOpen" :title="editing ? $t('webdav.editTitle', { name: editing.name }) : $t('webdav.new')" :description="$t('webdav.editDesc')" wide>
-      <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="canSave && save()">
-        <label class="field sm:col-span-2">{{ $t('webdav.name') }}<input v-model="form.name" class="input" :placeholder="$t('webdav.namePh')" maxlength="64" /></label>
-        <label class="field">{{ $t('login.username') }}
-          <input v-model="form.username" class="input font-mono" autocapitalize="off" autocomplete="off" @input="onUsername" />
-          <span v-if="form.username && !userOk" class="hint !text-red-600">{{ $t('webdav.usernameRule') }}</span>
-        </label>
-        <label class="field">{{ $t('webdav.slug') }}
-          <input v-model="form.slug" class="input font-mono" autocapitalize="off" autocomplete="off" @input="slugTouched = true" />
-          <span class="hint" :class="form.slug && !slugOk && '!text-red-600'">{{ form.slug && !slugOk ? $t('webdav.slugRule') : $t('webdav.urlPreview', { url: davUrl(form.slug || '…') }) }}</span>
-        </label>
-        <label v-if="!editing" class="field sm:col-span-2">{{ $t('login.password') }}
-          <input v-model="form.password" type="password" class="input font-mono" autocomplete="new-password" :placeholder="$t('webdav.passwordPh')" />
-          <span v-if="!pwOk" class="hint !text-red-600">{{ $t('webdav.passwordRule') }}</span>
-        </label>
-
-        <div class="field sm:col-span-2">
-          <div class="flex items-center">
-            <span>{{ $t('webdav.sharedDirs') }}</span>
-            <button type="button" class="btn btn-sm ml-auto" @click="addDir"><FolderPlus class="h-3.5 w-3.5" />{{ $t('webdav.addDir') }}</button>
-          </div>
-          <p v-if="!form.dirs.length" class="muted rounded-lg border border-dashed border-[var(--border)] px-3 py-5 text-center text-[13px] font-normal">{{ $t('webdav.noDirs') }}</p>
-          <ul v-else class="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] font-normal">
-            <li v-for="(d, i) in form.dirs" :key="i" class="grid grid-cols-[1fr_auto] gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_8.5rem_6.5rem_auto] sm:items-center">
-              <button type="button" class="flex min-w-0 items-center gap-2 text-left text-[13px] hover:text-brand-600" :title="$t('webdav.changeDir')" @click="changeDir(i)">
-                <FileIcon :entry="{ isDir: true, name: d.path }" :size="16" /><span class="truncate font-mono text-xs">{{ d.path }}</span>
-              </button>
-              <button type="button" class="btn btn-sm !px-1.5 sm:order-last" :title="$t('webdav.removeDir')" :aria-label="$t('webdav.removeDir')" @click="form.dirs.splice(i, 1)"><X class="h-3.5 w-3.5" /></button>
-              <input v-model="d.alias" class="input input-sm" :class="clashes.has(i) && '!border-red-500'" :placeholder="displayName({ ...d, alias: '' })" :title="$t('webdav.aliasHint')" maxlength="255" />
-              <select v-model="d.perm" class="input input-sm">
-                <option value="rw">{{ $t('grants.rw') }}</option>
-                <option value="r">{{ $t('files.readOnly') }}</option>
-              </select>
+    <Modal :open="!!viewTarget" @update:open="(v) => { if (!v) viewTarget = null }" :title="$t('webdav.viewTitle', { name: viewTarget?.name ?? '' })" :description="viewTarget ? davUrl(viewTarget.slug) : ''" wide>
+      <template v-if="viewTarget">
+      <ul class="rounded-lg border border-[var(--border)] py-1 text-[13px]">
+          <template v-for="(n, i) in toTree(viewTarget.dirs)" :key="i">
+            <li v-if="n.kind === 'folder'" class="px-3 py-1">
+              <div class="flex items-center gap-2">
+                <FolderTree class="h-4 w-4 shrink-0 text-brand-600" />
+                <span class="font-medium">{{ n.name }}</span>
+                <span class="badge badge-warning ml-auto">{{ $t('files.readOnly') }}</span>
+              </div>
+              <div v-for="l in n.items" :key="l.path" class="ml-2 flex items-center gap-2 border-l border-[var(--border)] py-0.5 pl-4">
+                <FileIcon :entry="{ isDir: looksDir(l), name: l.path }" :size="14" />
+                <span>{{ leafName(l) }}</span>
+                <span class="muted min-w-0 flex-1 truncate font-mono text-xs" :title="l.path">← {{ l.path }}</span>
+              </div>
             </li>
-          </ul>
-          <span v-if="clashes.size" class="hint !text-red-600">{{ $t('webdav.clash') }}</span>
-          <span v-else class="hint">{{ $t('webdav.aliasHint') }}</span>
-        </div>
-        <label class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.enabled" type="checkbox" />{{ $t('webdav.enabledLabel') }}</label>
-      </form>
+            <li v-else class="flex items-center gap-2 px-3 py-1">
+              <FileIcon :entry="{ isDir: looksDir(n), name: n.path }" :size="16" />
+              <span class="font-medium">{{ leafName(n) }}</span>
+              <span class="muted min-w-0 flex-1 truncate font-mono text-xs" :title="n.path">← {{ n.path }}</span>
+              <span class="badge" :class="n.perm === 'rw' ? 'badge-success' : 'badge-warning'">{{ n.perm === 'rw' ? $t('grants.rw') : $t('files.readOnly') }}</span>
+            </li>
+          </template>
+          <li v-for="d in viewTarget.dirs.filter((x) => x.missing)" :key="'m' + d.path" class="flex items-center gap-2 px-3 py-1 text-xs text-red-600">
+            <TriangleAlert class="h-3.5 w-3.5" />{{ $t('webdav.missing') }}：<span class="font-mono">{{ d.path }}</span>
+          </li>
+        </ul>
+      </template>
       <template #footer>
-        <button class="btn" @click="editOpen = false">{{ $t('common.cancel') }}</button>
-        <button class="btn btn-primary" :disabled="!canSave" @click="save">{{ editing ? $t('common.save') : $t('common.create') }}</button>
+        <button class="btn" @click="viewTarget && startEdit(viewTarget); viewTarget = null"><Pencil class="h-3.5 w-3.5" />{{ $t('common.edit') }}</button>
+        <button class="btn btn-primary" @click="viewTarget = null">{{ $t('common.close') }}</button>
       </template>
     </Modal>
 
-    <FolderPicker
-      v-model:open="picker.open" :title="$t('webdav.pickTitle')" :start="pickerStart"
-      :confirm-text="$t('grants.pickConfirm')" @pick="onPick"
-    />
+    <DavEditor v-model:open="editOpen" :editing="editing" @saved="onSaved" />
 
     <Modal :open="!!creds" @update:open="(v) => { if (!v) creds = null }" :title="creds?.title ?? ''" :description="$t('webdav.credsOnce')" wide>
       <dl v-if="creds" class="grid grid-cols-[minmax(4rem,max-content)_1fr] items-center gap-x-3 gap-y-2 text-[13px]">

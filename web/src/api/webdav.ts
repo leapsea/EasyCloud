@@ -1,6 +1,7 @@
 import { request } from './client'
 
-export interface DavDir { path: string; alias: string; perm: 'r' | 'rw'; name?: string; missing?: boolean }
+// folder: set on data added into that virtual folder (read-only); empty for data shared at the root.
+export interface DavDir { path: string; alias: string; perm: 'r' | 'rw'; folder?: string; name?: string; isDir?: boolean; missing?: boolean }
 export interface DavConfig {
   id: string; name: string; slug: string; username: string; enabled: boolean
   dirs: DavDir[]; createdBy: string; createdAt: string; updatedAt: string

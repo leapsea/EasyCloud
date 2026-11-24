@@ -35,13 +35,20 @@ type Config struct {
 	hash      string
 }
 
-// Dir is one shared directory. Name is the folder name clients see at the root
-// (the alias, or the directory's own name).
+// Dir is one entry of a config. Without Folder it is a shared directory (or a
+// single file, read-only) at the root, under Name (the alias, or its own
+// name). With Folder it
+// is a file or directory gathered into the virtual folder of that name: the
+// virtual folder appears at the root and lists its entries under their names;
+// it is always read-only, since a write there could not tell which real
+// folder is meant.
 type Dir struct {
 	Path    string `json:"path"`
 	Alias   string `json:"alias"`
-	Perm    string `json:"perm"` // "r" | "rw"
+	Perm    string `json:"perm"` // "r" | "rw"; always "r" inside a virtual folder
+	Folder  string `json:"folder,omitempty"`
 	Name    string `json:"name"`
+	IsDir   bool   `json:"isDir"`
 	Missing bool   `json:"missing,omitempty"`
 }
 
@@ -50,7 +57,10 @@ var (
 	userRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
 )
 
-const maxDirs = 50
+const (
+	maxDirs    = 50  // entries at the root (directories and virtual folders)
+	maxEntries = 500 // all rows, including the entries of virtual folders
+)
 
 func invalid(detail string) error { return errs.ErrInvalidInput.WithDetail(detail) }
 
@@ -111,7 +121,7 @@ func scanCfg(r interface{ Scan(...any) error }) (Config, error) {
 }
 
 func (s *Service) loadDirs(ctx context.Context, c *Config) error {
-	rows, err := s.db.R.QueryContext(ctx, "SELECT path, alias, perm FROM easycloud_dav_dirs WHERE config_id = ? ORDER BY position", c.ID)
+	rows, err := s.db.R.QueryContext(ctx, "SELECT path, alias, perm, folder FROM easycloud_dav_dirs WHERE config_id = ? ORDER BY position", c.ID)
 	if err != nil {
 		return err
 	}
@@ -120,19 +130,30 @@ func (s *Service) loadDirs(ctx context.Context, c *Config) error {
 	for rows.Next() {
 		var d Dir
 		var perm int
-		if err := rows.Scan(&d.Path, &d.Alias, &perm); err != nil {
+		if err := rows.Scan(&d.Path, &d.Alias, &perm, &d.Folder); err != nil {
 			return err
 		}
 		d.Perm = pathguard.Perm(perm).String()
 		d.Name = effectiveName(d)
 		if p, err := pathguard.Parse(d.Path); err != nil {
 			d.Missing = true
-		} else if fi, err := s.dataRoot.Stat(p.String()); err != nil || !fi.IsDir() {
+		} else if fi, err := s.dataRoot.Stat(p.String()); err != nil {
 			d.Missing = true
+		} else {
+			d.IsDir = fi.IsDir()
 		}
 		c.Dirs = append(c.Dirs, d)
 	}
 	return rows.Err()
+}
+
+// validName: a single, addressable path segment (aliases, virtual folder names).
+func validName(n string) bool {
+	if n == "" || strings.Contains(n, "/") || len([]rune(n)) > 255 {
+		return false
+	}
+	p, err := pathguard.Parse(n)
+	return err == nil && len(p.Segments()) == 1
 }
 
 func effectiveName(d Dir) string {
@@ -209,41 +230,68 @@ func (s *Service) normalize(in *Input) ([]Dir, error) {
 	if !userRe.MatchString(in.Username) {
 		return nil, invalid("username must match [A-Za-z0-9][A-Za-z0-9_.-]{0,31}")
 	}
-	if len(in.Dirs) == 0 || len(in.Dirs) > maxDirs {
-		return nil, invalid(fmt.Sprintf("1-%d directories are required", maxDirs))
+	if len(in.Dirs) == 0 || len(in.Dirs) > maxEntries {
+		return nil, invalid(fmt.Sprintf("1-%d entries are required", maxEntries))
 	}
 	seenPath := map[string]bool{}
-	seenName := map[string]string{}
+	rootNames := map[string]string{}              // lower-case name at the root -> what it is
+	folderNames := map[string]map[string]string{} // virtual folder -> lower-case entry name -> path
 	out := make([]Dir, 0, len(in.Dirs))
 	for _, d := range in.Dirs {
+		folder := strings.TrimSpace(d.Folder)
+		if folder != "" && !validName(folder) {
+			return nil, invalid("virtual folder name " + folder + " is not a valid folder name")
+		}
 		p, err := pathguard.Parse(d.Path)
-		if err != nil {
+		if err != nil || (folder != "" && p.IsRoot()) {
 			return nil, invalid("invalid path " + d.Path)
 		}
-		if fi, err := s.dataRoot.Stat(p.String()); err != nil || !fi.IsDir() {
-			return nil, invalid(p.Display() + " is not an existing directory")
+		fi, err := s.dataRoot.Stat(p.String())
+		if err != nil || (!fi.IsDir() && !fi.Mode().IsRegular()) {
+			return nil, invalid(p.Display() + " does not exist")
 		}
-		if seenPath[p.Display()] {
+		key := folder + "\x00" + p.Display()
+		if seenPath[key] {
 			return nil, invalid(p.Display() + " is listed twice")
 		}
-		seenPath[p.Display()] = true
+		seenPath[key] = true
 		alias := strings.TrimSpace(d.Alias)
-		if alias != "" {
-			if a, err := pathguard.Parse(alias); err != nil || len(a.Segments()) != 1 || strings.Contains(alias, "/") {
-				return nil, invalid("alias " + alias + " is not a valid folder name")
-			}
+		if alias != "" && !validName(alias) {
+			return nil, invalid("alias " + alias + " is not a valid name")
 		}
-		if d.Perm != "r" && d.Perm != "rw" {
+		perm := d.Perm
+		if folder != "" || !fi.IsDir() {
+			perm = "r" // virtual folders and single files are read-only
+		} else if perm != "r" && perm != "rw" {
 			return nil, invalid("perm must be r or rw")
 		}
-		nd := Dir{Path: p.Display(), Alias: alias, Perm: d.Perm}
+		nd := Dir{Path: p.Display(), Alias: alias, Perm: perm, Folder: folder, IsDir: fi.IsDir()}
 		nd.Name = effectiveName(nd)
-		key := strings.ToLower(nd.Name)
-		if other, dup := seenName[key]; dup {
-			return nil, invalid(fmt.Sprintf("%s and %s would both appear as \"%s\": set an alias", other, nd.Path, nd.Name))
+		if folder == "" {
+			k := strings.ToLower(nd.Name)
+			if other, dup := rootNames[k]; dup {
+				return nil, invalid(fmt.Sprintf("%s and %s would both appear as \"%s\": set an alias", other, nd.Path, nd.Name))
+			}
+			rootNames[k] = nd.Path
+		} else {
+			if folderNames[folder] == nil {
+				k := strings.ToLower(folder)
+				if other, dup := rootNames[k]; dup {
+					return nil, invalid(fmt.Sprintf("virtual folder %q and %s would both appear as %q", folder, other, folder))
+				}
+				rootNames[k] = "virtual folder " + folder
+				folderNames[folder] = map[string]string{}
+			}
+			k := strings.ToLower(nd.Name)
+			if other, dup := folderNames[folder][k]; dup {
+				return nil, invalid(fmt.Sprintf("%s and %s would both appear as \"%s\" in %s: set an alias", other, nd.Path, nd.Name, folder))
+			}
+			folderNames[folder][k] = nd.Path
 		}
-		seenName[key] = nd.Path
 		out = append(out, nd)
+	}
+	if len(rootNames) > maxDirs {
+		return nil, invalid(fmt.Sprintf("at most %d entries at the root", maxDirs))
 	}
 	return out, nil
 }
@@ -262,8 +310,8 @@ func (s *Service) writeDirs(ctx context.Context, tx *sql.Tx, id string, dirs []D
 		if d.Perm == "rw" {
 			perm = pathguard.PermRW
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO easycloud_dav_dirs (config_id, position, path, alias, perm) VALUES (?,?,?,?,?)",
-			id, i, d.Path, d.Alias, int(perm)); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO easycloud_dav_dirs (config_id, position, path, alias, perm, folder) VALUES (?,?,?,?,?,?)",
+			id, i, d.Path, d.Alias, int(perm), d.Folder); err != nil {
 			return err
 		}
 	}
