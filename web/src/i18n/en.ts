@@ -426,6 +426,10 @@ export default {
     "webdav": "WebDAV"
   },
   "office": {
+    "downloadFailed": "The Document Server could not download this file.\nIt tried {base}: make sure the Document Server can reach it. If it runs in a container, set “EasyCloud address seen by the Document Server” in the OnlyOffice plugin settings (e.g. LAN IP and port).",
+    "editorError": "Document editor error ({code}): {detail}",
+    "loopbackHint": "You are using {base}; the Document Server most likely cannot download files from it (it points at the Document Server itself). Set “EasyCloud address seen by the Document Server” in the OnlyOffice plugin settings, e.g. http://LAN-IP:port.",
+    "openPluginConfig": "Open plugin settings",
     "scriptFailed": "Could not load {src}. Check that the Document Server address is reachable from your browser."
   },
   "picker": {
@@ -628,6 +632,14 @@ export default {
       "move": "Move",
       "videofix": "Save fixed video"
     }
+  },
+  "textViewer": {
+    "all": "{size} file, fully shown",
+    "end": "Show end",
+    "head": "{size} file, showing the first {shown}",
+    "more": "Load {size} more",
+    "start": "Back to start",
+    "tail": "{size} file, showing the last {shown}"
   },
   "theme": {
     "accent": {

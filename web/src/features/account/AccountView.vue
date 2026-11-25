@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText as clipCopy } from '@/components/clipboard'
 import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { useLocalePref } from '@/i18n'
@@ -53,7 +54,7 @@ async function createAppPassword() {
 async function removeAppPassword(a: AppPassword) {
   try { await appPasswordApi.remove(a.id); toast.success(t('toast.appPwRevoked'), t('toast.appPwRevokedD')); loadAppPasswords() } catch (e) { toast.error(e) }
 }
-async function copyText(text: string) { try { await navigator.clipboard.writeText(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) } }
+async function copyText(text: string) { try { await clipCopy(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) } }
 
 onMounted(async () => {
   if (auth.user) usage.value = await filesApi.usage(auth.user.home).catch(() => null)

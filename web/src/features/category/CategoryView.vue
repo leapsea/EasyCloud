@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import OfficeOverlay from '@/features/office/OfficeOverlay.vue'
+import { isPdf, isTextFile } from '@/components/fileKinds'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -128,17 +130,18 @@ onBeforeUnmount(() => io?.disconnect())
 // Opening follows the file manager: plugin viewers, Office, the lightbox, the
 // built-in preview (video, audio, PDF, text), otherwise a download.
 const preview = ref<FileEntry | null>(null)
+const officePath = ref<string | null>(null) // document open in the office editor overlay
 const pluginView = ref<{ e: FileEntry; p: ViewerPlugin } | null>(null)
 const lightbox = ref<number | null>(null)
 const images = computed(() => items.value.filter((x) => (x.mime ?? '').startsWith('image/') && (x.thumb || /^image\/(jpeg|png|gif|webp|svg)/.test(x.mime ?? ''))))
 async function open(e: FileEntry) {
   await plugins.load()
-  if (plugins.office && isOffice(e.name)) { router.push({ path: '/office', query: { path: e.path } }); return }
+  if (plugins.office && isOffice(e.name)) { officePath.value = e.path; return } // over the page: closing it keeps the list as it was
   const p = plugins.viewerFor(e.name, e.mime)
   if (p) { pluginView.value = { e, p }; return }
   const i = images.value.findIndex((x) => x.path === e.path)
   if (i >= 0) { lightbox.value = i; return }
-  if (/^(video|audio)\//.test(e.mime ?? '') || e.mime?.includes('pdf') || e.mime?.startsWith('text/')) { preview.value = e; return }
+  if (/^(video|audio)\//.test(e.mime ?? '') || isPdf(e.name, e.mime) || isTextFile(e.name, e.mime)) { preview.value = e; return }
   download(e)
 }
 function download(e: FileEntry) {
@@ -270,6 +273,7 @@ const thumbUrl = (e: FileEntry) => `/api/files/thumb?size=128&path=${encodeURICo
       </div>
     </Teleport>
 
+    <OfficeOverlay :path="officePath" @close="officePath = null" />
     <PreviewModal :entry="preview" @close="preview = null" @download="download" />
     <PluginViewer :entry="pluginView?.e ?? null" :plugin="pluginView?.p ?? null" @close="pluginView = null" @download="download" />
     <ImageLightbox :images="images" :start="lightbox" @close="lightbox = null" @download="download" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText as clipCopy } from '@/components/clipboard'
 import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { Lock } from 'lucide-vue-next'
@@ -24,7 +25,7 @@ function state(s: Share) {
   return 'active'
 }
 async function copy(s: Share) {
-  try { await navigator.clipboard.writeText(`${location.origin}/s/${s.id}`); toast.success(t('toast.shareLinkCopied'), t('toast.shareLinkCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
+  try { await clipCopy(`${location.origin}/s/${s.id}`); toast.success(t('toast.shareLinkCopied'), t('toast.shareLinkCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 async function revoke(s: Share) {
   try { await shareApi.remove(s.id); toast.success(t('toast.shareRevoked'), t('toast.shareRevokedD')); load() } catch (e) { toast.error(e) }

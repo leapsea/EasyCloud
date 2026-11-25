@@ -426,6 +426,10 @@ export default {
     "webdav": "WebDAV"
   },
   "office": {
+    "downloadFailed": "文档服务器无法下载这个文件。\n它尝试访问的地址是 {base}，请确认 Document Server 能访问到它；如果 Document Server 运行在容器中，请在 OnlyOffice 插件配置里填写「EasyCloud 对 Document Server 可见的地址」（例如内网 IP 加端口）。",
+    "editorError": "文档编辑器报错（{code}）：{detail}",
+    "loopbackHint": "当前通过 {base} 访问，文档服务器很可能无法用这个地址下载文件（它指向文档服务器自己）。请在 OnlyOffice 插件配置中填写「EasyCloud 对 Document Server 可见的地址」，例如 http://内网IP:端口。",
+    "openPluginConfig": "前往插件配置",
     "scriptFailed": "无法加载 {src}，请检查 Document Server 地址是否可从浏览器访问"
   },
   "picker": {
@@ -628,6 +632,14 @@ export default {
       "move": "移动",
       "videofix": "保存修复视频"
     }
+  },
+  "textViewer": {
+    "all": "文件 {size}，已全部显示",
+    "end": "查看末尾",
+    "head": "文件 {size}，已显示开头 {shown}",
+    "more": "继续加载 {size}",
+    "start": "回到开头",
+    "tail": "文件 {size}，显示末尾 {shown}"
   },
   "theme": {
     "accent": {

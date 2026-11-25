@@ -44,8 +44,8 @@ onBeforeUnmount(() => window.removeEventListener('message', onMessage))
 </script>
 
 <template>
-  <Modal v-model:open="open" :title="entry?.name ?? ''" :description="plugin ? $t('viewer.by', { name: plugin.label }) : ''" wide>
-    <div class="relative h-[65vh] overflow-hidden rounded-lg border border-[var(--border)]">
+  <Modal v-model:open="open" :title="entry?.name ?? ''" :description="plugin ? $t('viewer.by', { name: plugin.label }) : ''" fill>
+    <div class="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-[var(--border)]">
       <iframe v-if="entry && plugin" ref="frame" src="/plugins/_host.html" sandbox="allow-scripts" class="h-full w-full" :title="entry.name" referrerpolicy="no-referrer" />
       <div v-if="loading && !err" class="muted absolute inset-0 flex items-center justify-center text-sm">{{ $t('common.loading') }}</div>
       <p v-if="err" class="absolute inset-x-0 top-4 text-center text-sm text-red-600">{{ err }}</p>

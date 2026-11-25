@@ -26,5 +26,6 @@ export const usePlugins = defineStore('plugins', () => {
   return { viewers, office, load, viewerFor }
 })
 
-export const officeExtensions = new Set(['doc', 'docx', 'odt', 'rtf', 'docm', 'dotx', 'xls', 'xlsx', 'ods', 'csv', 'xlsm', 'ppt', 'pptx', 'odp', 'ppsx', 'pdf'])
+export const officeExtensions = new Set(['doc', 'docx', 'odt', 'rtf', 'docm', 'dotx', 'xls', 'xlsx', 'ods', 'csv', 'xlsm', 'ppt', 'pptx', 'odp', 'ppsx'])
+// PDFs open in the browser's own viewer, not the office editor.
 export const isOffice = (name: string) => officeExtensions.has(name.split('.').pop()?.toLowerCase() ?? '')

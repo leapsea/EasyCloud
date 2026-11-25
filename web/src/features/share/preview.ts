@@ -1,4 +1,5 @@
 import type { ViewerPlugin } from '@/api/plugins'
+import { isPdf, isTextFile } from '@/components/fileKinds'
 
 // How a shared file can be opened online, in the same order as the file
 // manager: a viewer plugin first, then the built-in image / video / audio /
@@ -22,6 +23,6 @@ export function previewKind(viewers: ViewerPlugin[] | undefined, name: string, m
   if (IMAGE.test(m)) return 'image'
   if (m.startsWith('video/')) return 'video'
   if (m.startsWith('audio/')) return 'audio'
-  if (m === 'application/pdf' || m.startsWith('text/')) return 'frame'
+  if (isPdf(name, m) || isTextFile(name, m)) return 'frame'
   return null
 }

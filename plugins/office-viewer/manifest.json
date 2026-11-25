@@ -1,0 +1,21 @@
+{
+  "id": "office-viewer",
+  "name": "Office 只读预览",
+  "version": "1.0.0",
+  "type": "viewer",
+  "description": "无需 Document Server，在浏览器中只读预览 Word（docx）、Excel（xlsx）和 PowerPoint（pptx，仅文字）。已安装 OnlyOffice 时优先使用 OnlyOffice。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.3.0" },
+  "permissions": [],
+  "viewer": {
+    "entry": "index.js",
+    "mimes": [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    ],
+    "extensions": [".docx", ".docm", ".dotx", ".xlsx", ".xlsm", ".xltx", ".pptx", ".pptm", ".ppsx"],
+    "priority": 5,
+    "label": "Office 预览"
+  }
+}

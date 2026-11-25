@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import OfficeOverlay from '@/features/office/OfficeOverlay.vue'
+import { isPdf, isTextFile } from '@/components/fileKinds'
 import PageHeader from '@/components/PageHeader.vue'
 import { t as tr } from '@/i18n'
 import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, Ellipsis, ExternalLink, FolderInput, FolderOpen, FolderPlus, Info, LayoutGrid, List, LoaderCircle, PackageOpen, PencilLine, RotateCw, Search, SearchX, Share2, Trash2, Upload, X } from 'lucide-vue-next'
@@ -80,7 +82,7 @@ const SortIcon = (props: { col: SortKey }) =>
     sort.value.key === props.col ? [h(sort.value.asc ? ArrowUp : ArrowDown, { class: 'h-3 w-3' })] : [])
 watch(viewMode, (m) => { try { localStorage.setItem('ec.view', m) } catch { /* private mode */ } })
 
-const dir = computed(() => (typeof route.query.path === 'string' && route.query.path) || (auth.user?.isAdmin ? '/' : auth.user?.home ?? '/'))
+const dir = computed(() => (typeof route.query.path === 'string' && route.query.path) || '/')
 const access = computed(() => listing.value?.access ?? 'r')
 const canWrite = computed(() => access.value === 'rw')
 
@@ -177,6 +179,7 @@ onBeforeUnmount(() => { unsub?.(); offUpload(); clearTimeout(refreshTimer) })
 function navigate(path: string) { router.push({ path: '/files', query: { path } }) }
 
 const preview = ref<FileEntry | null>(null)
+const officePath = ref<string | null>(null) // document open in the office editor overlay
 const pluginView = ref<{ e: FileEntry; p: ViewerPlugin } | null>(null)
 const shareTarget = ref<FileEntry | null>(null)
 const tasks = useTasks()
@@ -202,12 +205,12 @@ const images = computed(() => entries.value.filter((x) => !x.isDir && (x.mime ??
 async function open(e: FileEntry) {
   if (e.isDir) { navigate(e.path); return }
   await plugins.load()
-  if (plugins.office && isOffice(e.name)) { router.push({ path: '/office', query: { path: e.path } }); return }
+  if (plugins.office && isOffice(e.name)) { officePath.value = e.path; return } // over the page: closing it keeps the list as it was
   const p = plugins.viewerFor(e.name, e.mime)
   if (p) { pluginView.value = { e, p }; return }
   const i = images.value.findIndex((x) => x.path === e.path)
   if (i >= 0) { lightbox.value = i; return }
-  if (/^(video|audio)\//.test(e.mime ?? '') || e.mime?.includes('pdf') || e.mime?.startsWith('text/')) preview.value = e
+  if (/^(video|audio)\//.test(e.mime ?? '') || isPdf(e.name, e.mime) || isTextFile(e.name, e.mime)) preview.value = e
   else download(e)
 }
 function download(e: FileEntry) {
@@ -614,6 +617,7 @@ const rows = computed(() => virtualizer.value.getVirtualItems())
       :confirm-text="picker.mode === 'move' ? $t('files.moveHere') : $t('files.copyHere')"
       :exclude="selectedEntries.filter((e) => e.isDir).map((e) => e.path)" @pick="doTransfer"
     />
+    <OfficeOverlay :path="officePath" @close="officePath = null" />
     <PreviewModal :entry="preview" @close="preview = null" @download="download" />
     <PluginViewer :entry="pluginView?.e ?? null" :plugin="pluginView?.p ?? null" @close="pluginView = null" @download="download" />
     <ImageLightbox :images="images" :start="lightbox" @close="lightbox = null" @download="download" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText as clipCopy } from '@/components/clipboard'
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { actionLabel } from '@/api/client'
 import { CircleCheck, CircleX, Info, TriangleAlert, X } from 'lucide-vue-next'
@@ -70,7 +71,7 @@ function go(t: Toast) {
   router.push({ path: t.action.route, query: t.action.focus ? { focus: t.action.focus } : {} })
   toast.dismiss(t.id)
 }
-function copyId(t: Toast) { if (t.requestId) navigator.clipboard?.writeText(t.requestId) }
+function copyId(t: Toast) { if (t.requestId) clipCopy(t.requestId).catch(() => {}) }
 </script>
 
 <template>

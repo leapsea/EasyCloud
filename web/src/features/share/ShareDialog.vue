@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText as clipCopy } from '@/components/clipboard'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import Modal from '@/components/Modal.vue'
@@ -31,7 +32,7 @@ async function create() {
 }
 const shareText = computed(() => link.value + (form.value.usePassword ? '\n' + t('shareDialog.codeLine', { code: form.value.password }) : ''))
 async function copy() {
-  try { await navigator.clipboard.writeText(shareText.value); toast.success(t('toast.copied'), t('toast.shareCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
+  try { await clipCopy(shareText.value); toast.success(t('toast.copied'), t('toast.shareCopiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 </script>
 

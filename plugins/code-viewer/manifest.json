@@ -1,0 +1,25 @@
+{
+  "id": "code-viewer",
+  "name": "代码预览",
+  "version": "1.0.0",
+  "type": "viewer",
+  "description": "以语法高亮和行号预览源代码与配置文件（HTML、JS、TS、Vue、CSS、Java、Kotlin、Go、Python、C/C++、Rust、PHP、SQL、JSON、XML、YAML、Shell 等）。HTML 只显示源码，不执行。",
+  "author": "EasyCloud",
+  "engines": { "easycloud": ">=0.3.0" },
+  "permissions": [],
+  "viewer": {
+    "entry": "index.js",
+    "mimes": ["text/html", "text/css", "text/javascript", "application/javascript", "application/json", "application/xml", "text/xml", "application/x-sh"],
+    "extensions": [
+      ".html", ".htm", ".xhtml", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte",
+      ".css", ".scss", ".sass", ".less",
+      ".java", ".kt", ".kts", ".groovy", ".gradle", ".scala", ".go", ".py", ".rb", ".php", ".pl", ".pm", ".lua", ".r", ".dart",
+      ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".cs", ".rs", ".swift", ".m", ".mm", ".vb",
+      ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd",
+      ".sql", ".json", ".jsonc", ".xml", ".xsd", ".xsl", ".plist", ".yaml", ".yml", ".toml", ".ini", ".properties", ".graphql", ".gql",
+      ".dockerfile", ".mk", ".makefile", ".diff", ".patch", ".nginx", ".wat"
+    ],
+    "priority": 5,
+    "label": "代码预览"
+  }
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText as clipCopy } from '@/components/clipboard'
 import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -21,7 +22,7 @@ async function load() {
 onMounted(load)
 
 async function copy(text: string) {
-  try { await navigator.clipboard.writeText(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
+  try { await clipCopy(text); toast.success(t('toast.copied'), t('toast.copiedD')) } catch { toast.warn(t('toast.copyFailed'), t('toast.copyFailedD')) }
 }
 async function toggle(c: DavConfig) {
   try {

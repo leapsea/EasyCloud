@@ -110,7 +110,7 @@ onMounted(loadMeta)
         </div>
 
         <div v-if="single && singleKind && singleKind !== 'plugin'" class="mt-4" :class="singleKind === 'audio' ? '' : 'card p-2'">
-          <ShareMedia :kind="singleKind" :url="previewUrl('/')" :name="single.name" />
+          <ShareMedia :kind="singleKind" :url="previewUrl('/')" :name="single.name" :size="single.size" :mime="single.mime" />
         </div>
 
         <template v-if="meta.isDir">
@@ -151,7 +151,7 @@ onMounted(loadMeta)
       </template>
     </div>
     <Modal v-model:open="previewOpen" :title="preview?.entry.name ?? ''" wide>
-      <ShareMedia v-if="preview" :key="preview.entry.path" :kind="preview.kind" :url="previewUrl(preview.entry.path)" :name="preview.entry.name" />
+      <ShareMedia v-if="preview" :key="preview.entry.path" :kind="preview.kind" :url="previewUrl(preview.entry.path)" :name="preview.entry.name" :size="preview.entry.size" :mime="preview.entry.mime" />
       <template #footer>
         <a v-if="preview" class="btn" :href="shareApi.downloadUrl(id, preview.entry.path, token)"><Download class="h-4 w-4" />{{ $t('common.download') }}</a>
         <button class="btn btn-primary" @click="preview = null">{{ $t('common.close') }}</button>

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -151,6 +152,19 @@ func baseURL(r *http.Request, configured string) string {
 	return scheme + "://" + host
 }
 
+func isLoopbackBase(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (s *Service) session(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.settings()
 	if err != nil {
@@ -204,7 +218,14 @@ func (s *Service) session(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	cfg["token"] = tok
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"server": st.server.String(), "config": cfg})
+	resp := map[string]any{"server": st.server.String(), "config": cfg, "base": base}
+	// The Document Server downloads the file from base. Derived from a loopback
+	// address (the browser on 127.0.0.1) it points the Document Server at
+	// itself, and the editor fails with "download failed": say why up front.
+	if st.publicURL == "" && isLoopbackBase(base) {
+		resp["hint"] = "OFFICE_LOOPBACK_URL"
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 	return nil
 }
 
