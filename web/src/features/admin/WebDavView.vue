@@ -89,12 +89,12 @@ async function remove() {
         <dl class="mt-3 grid grid-cols-[minmax(4rem,max-content)_1fr] items-center gap-x-3 gap-y-1.5 text-[13px]">
           <dt class="muted">{{ $t('webdav.url') }}</dt>
           <dd class="flex min-w-0 items-center gap-1.5">
-            <code class="truncate rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs">{{ davUrl(c.slug) }}</code>
+            <code class="select-all truncate rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs" :title="davUrl(c.slug)">{{ davUrl(c.slug) }}</code>
             <button class="btn btn-sm !px-1.5" :title="$t('common.copy')" :aria-label="$t('common.copy')" @click="copy(davUrl(c.slug))"><Copy class="h-3.5 w-3.5" /></button>
           </dd>
           <dt class="muted">{{ $t('login.username') }}</dt>
           <dd class="flex items-center gap-1.5">
-            <code class="rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs">{{ c.username }}</code>
+            <code class="select-all rounded bg-[var(--surface-sunken)] px-1.5 py-0.5 text-xs">{{ c.username }}</code>
             <button class="btn btn-sm !px-1.5" :title="$t('common.copy')" :aria-label="$t('common.copy')" @click="copy(c.username)"><Copy class="h-3.5 w-3.5" /></button>
           </dd>
         </dl>

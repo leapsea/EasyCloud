@@ -13,6 +13,7 @@ import { authApi, filesApi } from '@/api/files'
 import { errorMessage } from '@/api/client'
 import { appPasswordApi, type AppPassword } from '@/api/share'
 import Modal from '@/components/Modal.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { formatTime } from '@/components/format'
 import { useAuth } from '@/stores/auth'
 import { useToast } from '@/stores/toast'
@@ -224,7 +225,7 @@ async function change() {
       <form class="grid gap-3 text-sm" @submit.prevent="tfNext">
         <template v-if="tf.step === 'password'">
           <p class="muted text-xs">{{ $t('account.tfStep1') }}</p>
-          <input v-model="tf.password" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" autofocus />
+          <PasswordInput v-model="tf.password" :placeholder="$t('account.currentPw')" autocomplete="current-password" autofocus />
         </template>
         <template v-else-if="tf.step === 'scan'">
           <p class="muted text-xs leading-5">{{ $t('account.tfStep2') }}</p>
@@ -238,7 +239,7 @@ async function change() {
         </template>
         <template v-else>
           <p class="muted text-xs">{{ $t('account.tfUnbindHelp') }}</p>
-          <input v-model="tf.password" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" />
+          <PasswordInput v-model="tf.password" :placeholder="$t('account.currentPw')" autocomplete="current-password" />
           <input v-model="tf.code" class="input font-mono tracking-[0.3em]" :placeholder="$t('account.tfOrCode')" inputmode="numeric" autocomplete="one-time-code" maxlength="7" />
         </template>
         <p v-if="tf.error" class="text-xs text-red-600" role="alert">{{ tf.error }}</p>
@@ -255,9 +256,9 @@ async function change() {
 
     <form class="card grid gap-3 p-4" @submit.prevent="change">
       <h2 class="font-medium">{{ $t('account.changePw') }}</h2>
-      <input v-model="pw.current" type="password" class="input" :placeholder="$t('account.currentPw')" autocomplete="current-password" />
-      <input v-model="pw.next" type="password" class="input" :placeholder="$t('account.newPw')" autocomplete="new-password" />
-      <input v-model="pw.confirm" type="password" class="input" :placeholder="$t('account.confirmPw')" autocomplete="new-password" />
+      <PasswordInput v-model="pw.current" :placeholder="$t('account.currentPw')" autocomplete="current-password" />
+      <PasswordInput v-model="pw.next" :placeholder="$t('account.newPw')" autocomplete="new-password" />
+      <PasswordInput v-model="pw.confirm" :placeholder="$t('account.confirmPw')" autocomplete="new-password" />
       <button class="btn btn-primary justify-self-start" :disabled="busy || !pw.current || pw.next.length < 8">{{ $t('account.changePw') }}</button>
     </form>
   </section>

@@ -230,3 +230,51 @@ func TestPluginEnvHasNoSecrets(t *testing.T) {
 		}
 	}
 }
+
+// connectorDir 构造一个声明了必填配置的 connector 插件（结构同 plugins/onlyoffice）。
+func connectorDir(t *testing.T) string {
+	d := t.TempDir()
+	os.WriteFile(filepath.Join(d, "manifest.json"), []byte(`{"id":"office","name":"Office","version":"1.0.0","type":"connector",
+		"engines":{"easycloud":">=0.1.0"},"connector":{"kind":"onlyoffice"},
+		"config":[{"key":"documentServerUrl","label":"URL","type":"url","required":true},
+		          {"key":"jwtSecret","label":"Secret","type":"secret","required":true},
+		          {"key":"publicUrl","label":"Public","type":"url"}]}`), 0o644)
+	return d
+}
+
+// 需要配置的插件安装后、必填项补全前，不得显示为可用，也不得对外提供连接配置。
+func TestUnconfiguredPluginNotAvailable(t *testing.T) {
+	ctx := context.Background()
+	data, _ := Build(connectorDir(t), nil)
+	m := newManager(t, Options{AllowUnsigned: true})
+	inst, err := m.Install(ctx, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inst.Status != "unconfigured" {
+		t.Fatalf("status after install = %q, want unconfigured", inst.Status)
+	}
+	if _, ok := m.Connector("onlyoffice"); ok {
+		t.Fatal("unconfigured connector must not be available")
+	}
+	if l := m.List(); len(l) != 1 || l[0].Status != "unconfigured" {
+		t.Fatalf("list %+v", l)
+	}
+
+	// 补全必填项后转为就绪并可用。
+	if err := m.Update(ctx, "office", nil, map[string]any{"documentServerUrl": "https://ds.example.com", "jwtSecret": "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if l := m.List(); l[0].Status != "ready" {
+		t.Fatalf("status after config = %q, want ready", l[0].Status)
+	}
+	if cfg, ok := m.Connector("onlyoffice"); !ok || cfg["documentServerUrl"] != "https://ds.example.com" {
+		t.Fatalf("connector %v %v", cfg, ok)
+	}
+
+	// 停用时显示已停用，而不是待配置。
+	off := false
+	if err := m.Update(ctx, "office", &off, nil); err != nil || m.List()[0].Status != "stopped" {
+		t.Fatalf("disable: %v %q", err, m.List()[0].Status)
+	}
+}

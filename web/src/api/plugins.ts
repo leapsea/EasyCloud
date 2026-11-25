@@ -8,7 +8,7 @@ export interface Manifest {
 }
 export interface InstalledPlugin {
   manifest: Manifest; enabled: boolean; config: Record<string, unknown>; signedBy: string
-  installedAt: string; updatedAt: string; status: 'running' | 'stopped' | 'error' | 'ready'; error?: string
+  installedAt: string; updatedAt: string; status: 'running' | 'stopped' | 'error' | 'ready' | 'unconfigured'; error?: string
 }
 export interface RepoPlugin { id: string; name: string; type: string; description: string; latest?: string; installed?: string; update?: boolean }
 

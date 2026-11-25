@@ -176,6 +176,7 @@ export default {
     "done": "完成",
     "download": "下载",
     "edit": "编辑",
+    "holdToShowPw": "按住显示密码",
     "loading": "加载中…",
     "ok": "确定",
     "optional": "可选",
@@ -528,8 +529,10 @@ export default {
       "error": "错误",
       "ready": "已就绪",
       "running": "运行中",
-      "stopped": "已停用"
+      "stopped": "已停用",
+      "unconfigured": "待配置"
     },
+    "needsConfig": "必填配置尚未填写，插件暂不可用。请点击「配置」完成设置。",
     "tabInstalled": "已安装（{n}）",
     "tabRepo": "插件仓库",
     "unsigned": "未验证签名",

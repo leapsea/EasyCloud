@@ -176,6 +176,7 @@ export default {
     "done": "Done",
     "download": "Download",
     "edit": "Edit",
+    "holdToShowPw": "Hold to show password",
     "loading": "Loading…",
     "ok": "OK",
     "optional": "Optional",
@@ -528,8 +529,10 @@ export default {
       "error": "Error",
       "ready": "Ready",
       "running": "Running",
-      "stopped": "Disabled"
+      "stopped": "Disabled",
+      "unconfigured": "Needs setup"
     },
+    "needsConfig": "Required settings are missing, so this plugin is not available yet. Click Configure to finish setup.",
     "tabInstalled": "Installed ({n})",
     "tabRepo": "Repository",
     "unsigned": "Unverified signature",

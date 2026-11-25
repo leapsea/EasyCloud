@@ -29,6 +29,8 @@ EasyCloud 有三类插件，共用一种包格式：zip 根目录放 `manifest.j
 
 `secret` 类型的配置在管理界面中以 `********` 显示，提交未修改的掩码不会覆盖原值。
 
+声明了 `required: true`（且无 `default`）的配置项未填写时，插件状态为 `unconfigured`（待配置）：后端插件不会启动，查看器不会出现在打开方式中，connector 不对外提供（如 OnlyOffice 在线编辑入口隐藏），直到管理员在插件页点「配置」补全。
+
 ## 查看器插件
 
 入口模块默认导出 `mount(el, ctx)`：

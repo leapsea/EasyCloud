@@ -41,10 +41,11 @@ onMounted(async () => {
   if (highlight.value) {
     if (!items.value.some((p) => p.manifest.id === highlight.value)) { tab.value = 'repo'; await loadRepo() }
     await showHighlight()
-    return
   }
-  const want = items.value.find((p) => p.manifest.type === 'connector' && (!p.config.documentServerUrl))
-  if (route.query.focus === undefined && want) startConfig(want)
+  // 进入插件页不自动弹出任何配置窗口，配置弹窗只由用户点击「配置」按钮（startConfig）打开。
+  // 旧逻辑：任意 connector 类型插件缺少 documentServerUrl（如未配置的 OnlyOffice）时挂载即弹窗，已废弃。
+  // const want = items.value.find((p) => p.manifest.type === 'connector' && (!p.config.documentServerUrl))
+  // if (route.query.focus === undefined && want) startConfig(want)
 })
 
 const kind = (k: string) => t(`plugins.kind.${k}`)
@@ -112,10 +113,12 @@ async function remove() {
             <p class="font-medium">{{ p.manifest.name }} <span class="muted text-xs">v{{ p.manifest.version }}</span></p>
             <p class="muted text-xs">{{ kind(p.manifest.type) }} · {{ p.manifest.author }} · {{ p.manifest.id }}</p>
           </div>
-          <span class="badge" :class="{ 'badge-success': p.status === 'running' || p.status === 'ready', 'badge-danger': p.status === 'error' }">{{ statusText(p.status) }}</span>
+          <span class="badge" :class="{ 'badge-success': p.status === 'running' || p.status === 'ready', 'badge-warning': p.status === 'unconfigured', 'badge-danger': p.status === 'error' }">{{ statusText(p.status) }}</span>
         </div>
         <p class="mt-2 text-sm">{{ p.manifest.description }}</p>
         <p v-if="p.error" class="mt-2 break-all text-xs text-red-600">{{ p.error }}</p>
+        <!-- 待配置：后端按 manifest 必填项判定，此处只做引导，不自动弹窗 -->
+        <p v-if="p.status === 'unconfigured'" class="mt-2 text-xs text-amber-600">{{ $t('plugins.needsConfig') }}</p>
         <p class="muted mt-2 text-xs">
           <span v-if="p.signedBy" class="inline-flex items-center gap-1 text-emerald-600"><BadgeCheck class="h-3.5 w-3.5" />{{ $t('plugins.signed', { key: p.signedBy }) }}</span>
           <span v-else class="inline-flex items-center gap-1 text-amber-600"><ShieldAlert class="h-3.5 w-3.5" />{{ $t('plugins.unsigned') }}</span>
@@ -124,7 +127,7 @@ async function remove() {
         </p>
         <div class="mt-3 flex gap-2">
           <button class="btn" :disabled="busy === p.manifest.id" @click="toggle(p)">{{ p.enabled ? $t('plugins.disable') : $t('plugins.enable') }}</button>
-          <button v-if="p.manifest.config?.length" class="btn" @click="startConfig(p)">{{ $t('plugins.configure') }}</button>
+          <button v-if="p.manifest.config?.length" class="btn" :class="{ 'btn-primary': p.status === 'unconfigured' }" @click="startConfig(p)">{{ $t('plugins.configure') }}</button>
           <button class="btn btn-danger ml-auto" @click="delTarget = p">{{ $t('plugins.remove') }}</button>
         </div>
       </div>

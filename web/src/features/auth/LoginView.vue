@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import LangToggle from '@/components/LangToggle.vue'
 import { Cloud } from 'lucide-vue-next'
@@ -47,7 +48,7 @@ async function submit() {
         >{{ m === 'password' ? $t('login.byPassword') : $t('login.byCode') }}</button>
       </div>
       <input v-model="username" class="input mt-3" :placeholder="$t('login.username')" autocomplete="username" autocapitalize="off" autofocus />
-      <input v-if="mode === 'password'" v-model="password" type="password" class="input mt-3" :placeholder="$t('login.password')" autocomplete="current-password" />
+      <PasswordInput v-if="mode === 'password'" v-model="password" class="mt-3" :placeholder="$t('login.password')" autocomplete="current-password" />
       <input
         v-else v-model="code" class="input mt-3 font-mono tracking-[0.3em]" :placeholder="$t('login.codePlaceholder')"
         inputmode="numeric" autocomplete="one-time-code" maxlength="7"

@@ -37,7 +37,7 @@ type Installed struct {
 	SignedBy    string         `json:"signedBy"`
 	InstalledAt time.Time      `json:"installedAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
-	Status      string         `json:"status"` // running | stopped | error | ready
+	Status      string         `json:"status"` // running | stopped | error | ready | unconfigured（启用但缺少 manifest 声明的必填配置）
 	Error       string         `json:"error,omitempty"`
 }
 
@@ -158,6 +158,11 @@ func (m *Manager) reconcile(id string) {
 		return
 	}
 	if p.Status == "error" && p.Error != "" && strings.HasPrefix(p.Error, "requires easycloud") {
+		return
+	}
+	// 必填配置缺失时不视为可用：不启动后端进程，状态标为待配置，由管理员在插件页点「配置」补全。
+	if missing := missingRequired(p.Manifest, p.Config); len(missing) > 0 {
+		p.Status, p.Error = "unconfigured", ""
 		return
 	}
 	if p.Manifest.Type != KindBackend {
@@ -291,6 +296,19 @@ func (w slogWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// missingRequired 按 manifest 声明的 required 字段返回缺失项的 key（默认值视为已填），
+// 是“插件是否配置完整”的唯一判定来源，前端只读取由此得出的 status。
+func missingRequired(m *Manifest, cfg map[string]any) []string {
+	eff := withDefaults(m, cfg)
+	var out []string
+	for _, f := range m.Config {
+		if f.Required && (eff[f.Key] == nil || eff[f.Key] == "") {
+			out = append(out, f.Key)
+		}
+	}
+	return out
+}
+
 func withDefaults(m *Manifest, cfg map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, f := range m.Config {
@@ -352,7 +370,7 @@ func (m *Manager) Viewers() []Viewer {
 	defer m.mu.RUnlock()
 	out := []Viewer{}
 	for _, p := range m.plugins {
-		if !p.Enabled || p.Manifest.Type != KindViewer || p.Status == "error" {
+		if !p.Enabled || p.Manifest.Type != KindViewer || p.Status == "error" || p.Status == "unconfigured" {
 			continue
 		}
 		v := p.Manifest.Viewer
@@ -388,11 +406,12 @@ func (m *Manager) ThumbnailProvider(mime string) (pluginsdk.Extension, string, b
 }
 
 // Connector returns the configuration of an enabled connector of the given kind.
+// 缺少必填配置的 connector 视为不可用（如未填 Document Server 地址的 OnlyOffice），依赖它的入口随之隐藏。
 func (m *Manager) Connector(kind string) (map[string]any, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, p := range m.plugins {
-		if p.Enabled && p.Manifest.Type == KindConnector && p.Manifest.Connector.Kind == kind {
+		if p.Enabled && p.Manifest.Type == KindConnector && p.Manifest.Connector.Kind == kind && len(missingRequired(p.Manifest, p.Config)) == 0 {
 			return withDefaults(p.Manifest, p.Config), true
 		}
 	}

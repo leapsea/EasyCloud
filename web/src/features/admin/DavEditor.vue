@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Ellipsis, FolderTree, Plus, TriangleAlert } from 'lucide-vue-next'
@@ -189,7 +190,7 @@ const rowBtn = 'flex h-7 w-7 shrink-0 items-center justify-center rounded-md tex
           <span v-if="form.username && !userOk" class="hint !text-red-600">{{ $t('webdav.usernameRule') }}</span>
         </label>
         <label v-if="!editing" class="field">{{ $t('login.password') }}
-          <input v-model="form.password" type="password" class="input font-mono" autocomplete="new-password" :placeholder="$t('webdav.passwordPh')" />
+          <PasswordInput v-model="form.password" class="font-mono" autocomplete="new-password" :placeholder="$t('webdav.passwordPh')" />
           <span v-if="!pwOk" class="hint !text-red-600">{{ $t('webdav.passwordRule') }}</span>
         </label>
         <div class="field">
